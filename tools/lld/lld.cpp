@@ -34,6 +34,7 @@ enum Flavor {
   Gnu,     // -flavor gnu
   WinLink, // -flavor link
   Darwin,  // -flavor darwin
+  Wasm,    // -flavor wasm
 };
 
 LLVM_ATTRIBUTE_NORETURN static void die(const Twine &S) {
@@ -44,6 +45,7 @@ LLVM_ATTRIBUTE_NORETURN static void die(const Twine &S) {
 static Flavor getFlavor(StringRef S) {
   return StringSwitch<Flavor>(S)
       .CasesLower("ld", "ld.lld", "gnu", Gnu)
+      .CasesLower("ld.wasm", "wasm", Wasm)
       .CaseLower("link", WinLink)
       .CaseLower("darwin", Darwin)
       .Default(Invalid);
@@ -106,6 +108,8 @@ int main(int Argc, const char **Argv) {
     return !coff::link(Args);
   case Darwin:
     return !mach_o::link(Args);
+  case Wasm:
+    return !wasm::link(Args);
   default:
     die("lld is a generic driver.\n"
         "Invoke ld.lld (Unix), ld (macOS) or lld-link (Windows) instead.");

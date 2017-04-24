@@ -221,4 +221,4 @@ endif()
 add_subdirectory(docs)
 add_subdirectory(COFF)
 add_subdirectory(ELF)
-
+add_subdirectory(wasm)
