@@ -33,9 +33,6 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK:         ParamTypes:      
 ; CHECK:           - I32
 ; CHECK:       - Index:           2
-; CHECK:         ReturnType:      NORESULT
-; CHECK:         ParamTypes:      
-; CHECK:       - Index:           3
 ; CHECK:         ReturnType:      I32
 ; CHECK:         ParamTypes:      
 ; CHECK:   - Type:            IMPORT
@@ -47,9 +44,9 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK:       - Module:          env
 ; CHECK:         Field:           foo_import
 ; CHECK:         Kind:            FUNCTION
-; CHECK:         SigIndex:        3
+; CHECK:         SigIndex:        2
 ; CHECK:   - Type:            FUNCTION
-; CHECK:     FunctionTypes:   [ 0, 2 ]
+; CHECK:     FunctionTypes:   [ 0, 0 ]
 ; CHECK:   - Type:            MEMORY
 ; CHECK:     Memories:        
 ; CHECK:       - Initial:         0x00000002

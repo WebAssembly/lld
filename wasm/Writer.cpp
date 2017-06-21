@@ -26,6 +26,36 @@ using namespace lld::wasm;
 
 namespace {
 
+// Needed for WasmSignatureDenseMapInfo
+bool operator==(const WasmSignature& LHS, const WasmSignature& RHS) {
+  return LHS.ReturnType == RHS.ReturnType && LHS.ParamTypes == RHS.ParamTypes;
+}
+
+// Traits for using WasmSignature in a DenseMap.
+struct WasmSignatureDenseMapInfo {
+  static WasmSignature getEmptyKey() {
+    WasmSignature Sig;
+    Sig.ReturnType = 1;
+    return Sig;
+  }
+  static WasmSignature getTombstoneKey() {
+    WasmSignature Sig;
+    Sig.ReturnType = 2;
+    return Sig;
+  }
+  static unsigned getHashValue(const WasmSignature &Sig) {
+    uintptr_t Value = 0;
+    Value += DenseMapInfo<int32_t>::getHashValue(Sig.ReturnType);
+    for (int32_t Param : Sig.ParamTypes)
+      Value += DenseMapInfo<int32_t>::getHashValue(Param);
+    return Value;
+  }
+  static bool isEqual(const WasmSignature &LHS,
+                      const WasmSignature &RHS) {
+    return LHS == RHS;
+  }
+};
+
 // The writer writes a SymbolTable result to a file.
 class Writer {
 public:
@@ -38,6 +68,7 @@ private:
   void assignSymbolIndexes();
   void calculateImports();
   void calculateOffsets();
+  void calculateTypes();
   void layoutMemory();
 
   void writeHeader();
@@ -66,7 +97,6 @@ private:
   SectionBookkeeping writeSectionHeader(uint32_t Type, raw_fd_ostream &OS);
   void endSection(SectionBookkeeping& Section, raw_fd_ostream &OS) const;
 
-  uint32_t TotalTypes = 0;
   uint32_t TotalFunctions = 0;
   uint32_t TotalGlobals = 0;
   uint32_t TotalMemoryPages = 0;
@@ -78,6 +108,8 @@ private:
   uint32_t TotalDataRelocations = 0;
 
   SymbolTable *Symtab;
+  std::vector<const WasmSignature*> Types;
+  DenseMap<WasmSignature, int32_t, WasmSignatureDenseMapInfo> TypeIndices;
   std::vector<Symbol*> FunctionImports;
   std::vector<Symbol*> GlobalImports;
   std::unique_ptr<raw_fd_ostream> OS;
@@ -363,11 +395,9 @@ void Writer::writeImportSection(raw_fd_ostream& OS) {
 
 void Writer::writeTypeSection(raw_fd_ostream& OS) {
   SectionBookkeeping Section = writeSectionHeader(WASM_SEC_TYPE, OS);
-  write_uleb128(TotalTypes, OS, "type count");
-  for (ObjectFile *File: Symtab->ObjectFiles) {
-    for (const WasmSignature &Sig: File->getWasmObj()->types()) {
-      write_sig(Sig, OS);
-    }
+  write_uleb128(Types.size(), OS, "type count");
+  for (const WasmSignature *Sig : Types) {
+    write_sig(*Sig, OS);
   }
   endSection(Section, OS);
 }
@@ -797,10 +827,6 @@ void Writer::calculateOffsets() {
   for (ObjectFile *File: Symtab->ObjectFiles) {
     const WasmObjectFile* WasmFile = File->getWasmObj();
 
-    // Type Index
-    File->TypeIndexOffset = TotalTypes;
-    TotalTypes += WasmFile->types().size();
-
     // Function Index
     File->FunctionIndexOffset = FunctionImports.size() - File->FunctionImports.size() + TotalFunctions;
     TotalFunctions += WasmFile->functions().size();
@@ -873,6 +899,20 @@ void Writer::calculateImports() {
   }
 }
 
+void Writer::calculateTypes() {
+  for (ObjectFile *File : Symtab->ObjectFiles) {
+    int Index = 0;
+    for (const WasmSignature &Sig: File->getWasmObj()->types()) {
+      auto Pair = TypeIndices.insert(std::make_pair(Sig, Types.size()));
+      if (Pair.second)
+        Types.push_back(&Sig);
+
+      // Now we map the input files index to the index in the linked output
+      File->TypeMap[Index++] = Pair.first->second;
+    }
+  }
+}
+
 void Writer::assignSymbolIndexes() {
   for (ObjectFile *File : Symtab->ObjectFiles) {
     for (Symbol *Sym : File->getSymbols()) {
@@ -891,6 +931,8 @@ void Writer::assignSymbolIndexes() {
 }
 
 void Writer::run() {
+  log("-- calculateTypes");
+  calculateTypes();
   log("-- calculateImports");
   calculateImports();
   log("-- calculateOffsets");

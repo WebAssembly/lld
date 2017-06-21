@@ -48,7 +48,6 @@ void ObjectFile::dumpInfo() const {
   log("reloc info for: " + getName());
   log("        FunctionIndexOffset : " + Twine(FunctionIndexOffset));
   log("     FunctionImports.size() : " + Twine(FunctionImports.size()));
-  log("            TypeIndexOffset : " + Twine(TypeIndexOffset));
   log("           TableIndexOffset : " + Twine(TableIndexOffset));
   log("          GlobalIndexOffset : " + Twine(GlobalIndexOffset));
   log("                 DataOffset : " + Twine(DataOffset));
@@ -102,7 +101,8 @@ uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
 }
 
 uint32_t ObjectFile::relocateTypeIndex(uint32_t original) const {
-  return original + TypeIndexOffset;
+  assert(TypeMap.count(original) > 0);
+  return TypeMap.find(original)->second;
 }
 
 uint32_t ObjectFile::relocateTableIndex(uint32_t original) const {

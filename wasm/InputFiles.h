@@ -11,9 +11,12 @@
 #define LLD_WASM_INPUT_FILES_H
 
 #include "lld/Core/LLVM.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Wasm.h"
+
+#include <vector>
 
 using llvm::object::WasmObjectFile;
 using llvm::object::WasmSection;
@@ -74,6 +77,10 @@ private:
 
 // .o file.
 class ObjectFile : public InputFile {
+  std::unique_ptr<WasmObjectFile> WasmObj;
+
+  void initializeSymbols();
+
 public:
   explicit ObjectFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
@@ -104,20 +111,15 @@ public:
 
   int32_t FunctionIndexOffset = 0;
   int32_t GlobalIndexOffset = 0;
-  uint32_t TypeIndexOffset = 0;
   uint32_t TableIndexOffset = 0;
   uint32_t CodeSectionOffset = 0;
   uint32_t DataOffset = 0;
   const WasmSection* CodeSection = nullptr;
   const WasmSection* DataSection = nullptr;
 
+  llvm::DenseMap<uint32_t, uint32_t> TypeMap;
   std::vector<const WasmSymbol*> FunctionImports;
   std::vector<const WasmSymbol*> GlobalImports;
-
-private:
-  void initializeSymbols();
-
-  std::unique_ptr<WasmObjectFile> WasmObj;
 };
 
 // Opens a given file.
