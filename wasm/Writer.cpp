@@ -439,8 +439,17 @@ void Writer::writeGlobalSection(raw_fd_ostream& OS) {
 
   if (Config->Relocatable) {
     for (ObjectFile *File: Symtab->ObjectFiles) {
+      uint32_t GlobalIndex = File->GlobalImports.size();
       for (const WasmGlobal &Global: File->getWasmObj()->globals()) {
-        write_global(Global, OS);
+        WasmGlobal RelocatedGlobal(Global);
+        if (Global.Type != WASM_TYPE_I32)
+          fatal("unsupported global type: " + Twine(Global.Type));
+        if (Global.InitExpr.Opcode != WASM_OPCODE_I32_CONST)
+          fatal("unsupported global init opcode: " +
+                Twine(Global.InitExpr.Opcode));
+        RelocatedGlobal.InitExpr.Value.Int32 = File->getGlobalAddress(GlobalIndex);
+        write_global(RelocatedGlobal, OS);
+        GlobalIndex++;
       }
     }
   }
@@ -503,9 +512,21 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
   }
 
   if (ExportOther) {
-    for (ObjectFile *File: Symtab->ObjectFiles) {
-      for (const WasmExport &Export: File->getWasmObj()->exports()) {
-        write_export(Export, OS);
+    for (ObjectFile *Obj: Symtab->ObjectFiles) {
+      for (const WasmExport &Export: Obj->getWasmObj()->exports()) {
+        WasmExport RelocatedExport(Export);
+        switch (Export.Kind) {
+        case WASM_EXTERNAL_FUNCTION:
+          RelocatedExport.Index = Obj->relocateFunctionIndex(Export.Index);
+          break;
+        case WASM_EXTERNAL_GLOBAL:
+          RelocatedExport.Index = Obj->relocateGlobalIndex(Export.Index);
+          break;
+        default:
+          fatal("unsupported export type: " + Twine(Export.Kind));
+          break;
+        }
+        write_export(RelocatedExport, OS);
       }
     }
   }
