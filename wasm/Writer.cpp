@@ -101,7 +101,6 @@ private:
   uint32_t TotalGlobals = 0;
   uint32_t TotalMemoryPages = 0;
   uint32_t TotalTableLength = 0;
-  uint32_t TotalExports = 0;
   uint32_t TotalElements = 0;
   uint32_t TotalDataSegments = 0;
   uint32_t TotalCodeRelocations = 0;
@@ -482,8 +481,11 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
   if (ExportMain)
     NumExports += 1;
 
-  if (ExportOther)
-    NumExports += TotalExports;
+  if (ExportOther) {
+    for (ObjectFile *File : Symtab->ObjectFiles)
+      for (const Symbol *Sym : File->getSymbols())
+        if (Sym->isDefined()) NumExports++;
+  }
 
   if (!NumExports)
     return;
@@ -512,23 +514,24 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
   }
 
   if (ExportOther) {
-    for (ObjectFile *Obj: Symtab->ObjectFiles) {
-      for (const WasmExport &Export: Obj->getWasmObj()->exports()) {
-        WasmExport RelocatedExport(Export);
-        switch (Export.Kind) {
-        case WASM_EXTERNAL_FUNCTION:
-          RelocatedExport.Index = Obj->relocateFunctionIndex(Export.Index);
-          break;
-        case WASM_EXTERNAL_GLOBAL:
-          RelocatedExport.Index = Obj->relocateGlobalIndex(Export.Index);
-          break;
-        default:
-          fatal("unsupported export type: " + Twine(Export.Kind));
-          break;
-        }
-        write_export(RelocatedExport, OS);
+    for (ObjectFile *File : Symtab->ObjectFiles) {
+      for (const Symbol *Sym : File->getSymbols()) {
+        if (Sym->isUndefined())
+          continue;
+        log("Export: " + Sym->getName());
+        WasmExport Export;
+        Export.Name = Sym->getName();
+        Export.Index = Sym->getOutputIndex();
+        if (Sym->isFunction())
+          Export.Kind = WASM_EXTERNAL_FUNCTION;
+        else
+          Export.Kind = WASM_EXTERNAL_GLOBAL;
+        write_export(Export, OS);
       }
     }
+
+    // TODO(sbc): Export local symbols too, Even though they are not part
+    // of the symbol table?
   }
 
   endSection(Section, OS);
@@ -873,9 +876,6 @@ void Writer::calculateOffsets() {
       else
         TotalTableLength += WasmFile->tables()[0].Limits.Initial;
     }
-
-    // Export
-    TotalExports += WasmFile->exports().size();
 
     // Elem
     uint32_t SegmentCount = WasmFile->elements().size();

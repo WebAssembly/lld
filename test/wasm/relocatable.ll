@@ -58,9 +58,6 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Name:            hello
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           2
-; CHECK-NEXT:       - Name:            .L.str
-; CHECK-NEXT:         Kind:            GLOBAL
-; CHECK-NEXT:         Index:           0
 ; CHECK-NEXT:       - Name:            my_func
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           3
