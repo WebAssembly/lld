@@ -100,7 +100,6 @@ inline llvm::raw_ostream &operator<<(raw_ostream &OS, wasm::Symbol &Sym) {
   return OS;
 }
 
-
 } // namespace lld
 
 

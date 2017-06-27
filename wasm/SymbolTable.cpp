@@ -12,6 +12,7 @@
 #include "Config.h"
 #include "Error.h"
 #include "Memory.h"
+#include "Strings.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
 #define DEBUG_TYPE "lld"
@@ -50,13 +51,13 @@ void SymbolTable::reportRemainingUndefines() {
   for (ObjectFile *File : ObjectFiles) {
     for (Symbol *Sym : File->getSymbols()) {
       if (Undefs.count(Sym))
-        warn(toString(File) + ": undefined symbol: " + Sym->getName());
+        error(toString(File) + ": undefined symbol: " + Sym->getName());
     }
   }
 
   for (Symbol *Sym : Undefs) {
     if (!Sym->getFile())
-      warn("undefined symbol: " + Sym->getName());
+      error("undefined symbol: " + Sym->getName());
   }
 
   fatal("link failed");
@@ -163,7 +164,7 @@ Symbol *SymbolTable::addUndefinedFunction(StringRef Name) {
 }
 
 Symbol *SymbolTable::addUndefined(InputFile* F, const WasmSymbol *Sym) {
-  DEBUG(dbgs() << "addUndefined: " << Sym->Name << "\n");
+  DEBUG(dbgs() << "addUndefined: " << displayName(Sym->Name) << "\n");
   Symbol *S;
   bool WasInserted;
   Symbol::Kind Kind = Symbol::UndefinedFunctionKind;
@@ -174,11 +175,11 @@ Symbol *SymbolTable::addUndefined(InputFile* F, const WasmSymbol *Sym) {
     S->update(Kind, F, Sym);
   } else {
     if (S->isLazy()) {
-      DEBUG(dbgs() << "resolved by lazy symbol: " << Sym->Name << " " << *S << "\n");
+      DEBUG(dbgs() << "resolved by existing lazy\n");
       auto *AF = cast<ArchiveFile>(S->getFile());
       AF->addMember(&S->getArchiveSymbol());
     } else if (S->isDefined()) {
-      DEBUG(dbgs() << "resolved by existing symbol: " << Sym->Name << "\n");
+      DEBUG(dbgs() << "resolved by existing\n");
       checkSymbolTypes(S, F, Sym);
     }
   }
@@ -186,7 +187,7 @@ Symbol *SymbolTable::addUndefined(InputFile* F, const WasmSymbol *Sym) {
 }
 
 void SymbolTable::addLazy(ArchiveFile *F, const Archive::Symbol *Sym) {
-  DEBUG(dbgs() << "addLazy: " << Sym->getName() << "\n");
+  DEBUG(dbgs() << "addLazy: " << displayName(Sym->getName()) << "\n");
   StringRef Name = Sym->getName();
   Symbol *S;
   bool WasInserted;

@@ -25,6 +25,7 @@ namespace wasm {
 struct Configuration {
   bool AllowUndefined = false;
   bool ColorDiagnostics = false;
+  bool Demangle = true;
   bool EmitRelocs = false;
   bool Relocatable = false;
   bool Verbose = false;

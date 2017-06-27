@@ -9,8 +9,10 @@
 
 #include "Symbols.h"
 
+#include "Config.h"
 #include "Error.h"
 #include "InputFiles.h"
+#include "Strings.h"
 
 #define DEBUG_TYPE "lld"
 
@@ -96,6 +98,9 @@ bool Symbol::isWeak() const {
 
 // Returns a symbol name for an error message.
 std::string toString(wasm::Symbol &Sym) {
+  if (wasm::Config->Demangle)
+    if (Optional<std::string> S = wasm::demangle(Sym.getName()))
+      return *S;
   return Sym.getName();
 }
 

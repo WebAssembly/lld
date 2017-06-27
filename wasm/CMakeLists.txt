@@ -6,6 +6,7 @@ add_lld_library(lldwasm
   Driver.cpp
   Error.cpp
   InputFiles.cpp
+  Strings.cpp
   SymbolTable.cpp
   Symbols.cpp
   Writer.cpp

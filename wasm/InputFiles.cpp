@@ -13,6 +13,7 @@
 #include "Driver.h"
 #include "Error.h"
 #include "Memory.h"
+#include "Strings.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Support/raw_ostream.h"
@@ -202,7 +203,7 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
       check(Sym->getMember(),
             "could not get the member for symbol " + Sym->getName());
 
-  DEBUG(dbgs() << "loading lazy symbol: " << Sym->getName() << "\n");
+  DEBUG(dbgs() << "loading lazy: " << displayName(Sym->getName()) << "\n");
   DEBUG(dbgs() << "from archive: " << toString(this) << "\n");
   //DEBUG(dbgs() << "loading symbol from object symbol: " << C.getName() << "\n");
   MemoryBufferRef MB =
