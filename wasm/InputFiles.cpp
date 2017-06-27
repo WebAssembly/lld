@@ -130,12 +130,16 @@ void ObjectFile::parse() {
   DEBUG(dbgs() << "Parsing object: " << toString(this) << "\n");
   std::unique_ptr<Binary> Bin = check(createBinary(MB), toString(this));
 
-  if (auto *Obj = dyn_cast<WasmObjectFile>(Bin.get())) {
-    Bin.release();
-    WasmObj.reset(Obj);
-  } else {
+  auto *Obj = dyn_cast<WasmObjectFile>(Bin.get());
+  if (!Obj)
     fatal(toString(this) + " is not a wasm file");
-  }
+  // TODO(sbc): Enable this change once the llvm support for this
+  //  method lands
+  //if (!Obj->isRelocatableObject())
+  //  fatal(toString(this) + ": not a relocatable wasm file");
+
+  Bin.release();
+  WasmObj.reset(Obj);
 
   for (const SectionRef &Sec: WasmObj->sections()) {
     const WasmSection &Section = WasmObj->getWasmSection(Sec);

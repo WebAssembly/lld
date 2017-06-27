@@ -54,14 +54,14 @@ entry:
 ; CHECK:           Maximum:         0x00000001
 ; CHECK:   - Type:            MEMORY
 ; CHECK:     Memories:        
-; CHECK:       - Initial:         0x00000003
+; CHECK:       - Initial:         0x00000002
 ; CHECK:   - Type:            GLOBAL
 ; CHECK:     Globals:         
 ; CHECK:       - Type:            I32
 ; CHECK:         Mutable:         true
 ; CHECK:         InitExpr:        
 ; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           132096
+; CHECK:           Value:           66564
 ; CHECK:   - Type:            EXPORT
 ; CHECK:     Exports:         
 ; CHECK:       - Name:            memory

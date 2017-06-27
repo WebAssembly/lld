@@ -89,6 +89,7 @@ private:
 
   // Custom sections
   void writeRelocSections(raw_fd_ostream &OS);
+  void writeLinkingSection(raw_fd_ostream &OS);
   void writeNameSection(raw_fd_ostream &OS);
 
   void applyCodeRelocations(const ObjectFile &File,
@@ -97,6 +98,8 @@ private:
   SectionBookkeeping writeSectionHeader(uint32_t Type, raw_fd_ostream &OS);
   void endSection(SectionBookkeeping& Section, raw_fd_ostream &OS) const;
 
+  uint32_t DataSize = 0;
+  uint32_t DataAlignment = 1;
   uint32_t TotalFunctions = 0;
   uint32_t TotalGlobals = 0;
   uint32_t TotalMemoryPages = 0;
@@ -122,11 +125,6 @@ unsigned PaddingFor5ByteULEB128(uint32_t X) {
 // Return the padding size to write a 32-bit value into a 5-byte SLEB128.
 unsigned PaddingFor5ByteSLEB128(int32_t X) {
   return 5 - getSLEB128Size(X);
-}
-
-uint32_t round_up_to_page_size(uint32_t size) {
-  static const uint32_t PageMask = ~(WasmPageSize - 1);
-  return (size + WasmPageSize - 1) & PageMask;
 }
 
 void debug_print(const char* fmt, ...) {
@@ -735,6 +733,21 @@ void Writer::writeRelocSections(raw_fd_ostream& OS) {
   endSection(Section, OS);
 }
 
+void Writer::writeLinkingSection(raw_fd_ostream& OS) {
+  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CUSTOM, OS);
+  write_str("linking", OS, "custom section name");
+
+  SectionBookkeeping SubSection = writeSectionHeader(WASM_DATA_SIZE, OS);
+  write_uleb128(DataSize, OS, "data size");
+  endSection(SubSection, OS);
+
+  SubSection = writeSectionHeader(WASM_DATA_ALIGNMENT, OS);
+  write_uleb128(DataAlignment, OS, "data alignment");
+  endSection(SubSection, OS);
+
+  endSection(Section, OS);
+}
+
 void Writer::writeNameSection(raw_fd_ostream& OS) {
   size_t FunctionNameCount = 0;
   for (ObjectFile *File: Symtab->ObjectFiles) {
@@ -809,40 +822,47 @@ void Writer::writeSections(raw_fd_ostream& OS) {
   // Optional, custom sections for relocations and debug names
   if (Config->EmitRelocs || Config->Relocatable)
     writeRelocSections(OS);
+  if (Config->Relocatable)
+    writeLinkingSection(OS);
   if (!Config->StripDebug && !Config->StripAll)
     writeNameSection(OS);
-
 }
 
 void Writer::layoutMemory() {
-  uint32_t MemoryPtr = Config->GlobalBase;
-  debug_print("mem: global base = %d\n", Config->GlobalBase);
+  uint32_t MemoryPtr = 0;
+  if (!Config->Relocatable) {
+    MemoryPtr += Config->GlobalBase;
+    debug_print("mem: global base = %d\n", Config->GlobalBase);
+  }
 
-  // Stat data input object files comes first
+  // Static data from input object files comes first
+  MemoryPtr = alignTo(MemoryPtr, DataAlignment);
   for (ObjectFile *File: Symtab->ObjectFiles) {
     const WasmObjectFile* WasmFile = File->getWasmObj();
-    if (WasmFile->memories().size() == 0)
-      continue;
-    if (WasmFile->memories()[0].Initial == 0)
-      continue;
-    File->DataOffset = MemoryPtr;
-    debug_print("mem: [%s] offset=%#x pages=%d\n",
-                File->getName().str().c_str(), File->DataOffset,
-                WasmFile->memories()[0].Initial);
-    MemoryPtr += WasmFile->memories()[0].Initial * WasmPageSize;
+    uint32_t Size = WasmFile->linkingData().DataSize;
+    if (Size) {
+      MemoryPtr = alignTo(MemoryPtr, WasmFile->linkingData().DataAlignment);
+      debug_print("mem: [%s] offset=%#x size=%d\n",
+                  File->getName().str().c_str(), File->DataOffset, Size);
+      File->DataOffset = MemoryPtr;
+      MemoryPtr += Size;
+    } else {
+      debug_print("mem: no data\n");
+    }
   }
 
   // Stack comes last
   if (!Config->Relocatable) {
-    debug_print("mem: stack base  = %#x\n", MemoryPtr);
+    debug_print("mem: stack base  = %d\n", MemoryPtr);
     MemoryPtr += Config->ZStackSize;
     Config->SyntheticGlobals[0].second.InitExpr.Value.Int32 = MemoryPtr;
-    debug_print("mem: stack top   = %#x\n", MemoryPtr);
+    debug_print("mem: stack top   = %d\n", MemoryPtr);
   }
 
-  uint32_t MemSize = round_up_to_page_size(MemoryPtr);
+  DataSize = MemoryPtr;
+  uint32_t MemSize = alignTo(MemoryPtr, WasmPageSize);
   TotalMemoryPages = MemSize / WasmPageSize;
-  debug_print("mem: total size  = %#x\n", MemSize);
+  debug_print("mem: total size  = %d\n", MemSize);
   debug_print("mem: total pages = %d\n", TotalMemoryPages);
 }
 
@@ -852,13 +872,18 @@ void Writer::calculateOffsets() {
   for (ObjectFile *File: Symtab->ObjectFiles) {
     const WasmObjectFile* WasmFile = File->getWasmObj();
 
+    DataAlignment =
+        std::max(DataAlignment, WasmFile->linkingData().DataAlignment);
+
     // Function Index
-    File->FunctionIndexOffset = FunctionImports.size() - File->FunctionImports.size() + TotalFunctions;
+    File->FunctionIndexOffset =
+        FunctionImports.size() - File->FunctionImports.size() + TotalFunctions;
     TotalFunctions += WasmFile->functions().size();
 
     // Global Index
     if (Config->Relocatable) {
-      File->GlobalIndexOffset = GlobalImports.size() - File->GlobalImports.size() + TotalGlobals;
+      File->GlobalIndexOffset =
+          GlobalImports.size() - File->GlobalImports.size() + TotalGlobals;
       TotalGlobals += WasmFile->globals().size();
     }
 

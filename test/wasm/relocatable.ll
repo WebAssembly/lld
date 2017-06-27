@@ -45,14 +45,14 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:     FunctionTypes:   [ 0, 2 ]
 ; CHECK-NEXT:   - Type:            MEMORY
 ; CHECK-NEXT:     Memories:        
-; CHECK-NEXT:       - Initial:         0x00000002
+; CHECK-NEXT:       - Initial:         0x00000001
 ; CHECK-NEXT:   - Type:            GLOBAL
 ; CHECK-NEXT:     Globals:         
 ; CHECK-NEXT:       - Type:            I32
 ; CHECK-NEXT:         Mutable:         false
 ; CHECK-NEXT:         InitExpr:        
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           1024
+; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:   - Type:            EXPORT
 ; CHECK-NEXT:     Exports:         
 ; CHECK-NEXT:       - Name:            hello
@@ -82,8 +82,13 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           1024
+; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:         Content:         68656C6C6F0A00
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            linking
+; CHECK-NEXT:     DataSize:        7
+; CHECK-NEXT:     DataAlignment:   1
+; CHECK-NEXT:     SymbolInfo:      
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   
@@ -96,5 +101,3 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Index:           3
 ; CHECK-NEXT:         Name:            my_func
 ; CHECK-NEXT: ...
-
-
