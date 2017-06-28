@@ -203,6 +203,11 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
       check(Sym->getMember(),
             "could not get the member for symbol " + Sym->getName());
 
+  // Don't try to load the same member twice (this can happen when members
+  // mutually reference each other.
+  if (!Seen.insert(C.getChildOffset()).second)
+    return;
+
   DEBUG(dbgs() << "loading lazy: " << displayName(Sym->getName()) << "\n");
   DEBUG(dbgs() << "from archive: " << toString(this) << "\n");
   //DEBUG(dbgs() << "loading symbol from object symbol: " << C.getName() << "\n");

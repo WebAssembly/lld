@@ -11,6 +11,7 @@
 #define LLD_WASM_INPUT_FILES_H
 
 #include "lld/Core/LLVM.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Object/Archive.h"
@@ -73,6 +74,7 @@ public:
 
 private:
   std::unique_ptr<Archive> File;
+  llvm::DenseSet<uint64_t> Seen;
 };
 
 // .o file.
