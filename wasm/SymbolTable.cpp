@@ -51,13 +51,13 @@ void SymbolTable::reportRemainingUndefines() {
   for (ObjectFile *File : ObjectFiles) {
     for (Symbol *Sym : File->getSymbols()) {
       if (Undefs.count(Sym))
-        error(toString(File) + ": undefined symbol: " + Sym->getName());
+        error(toString(File) + ": undefined symbol: " + toString(*Sym));
     }
   }
 
   for (Symbol *Sym : Undefs) {
     if (!Sym->getFile())
-      error("undefined symbol: " + Sym->getName());
+      error("undefined symbol: " + toString(*Sym));
   }
 
   fatal("link failed");
