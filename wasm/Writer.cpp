@@ -575,6 +575,7 @@ void Writer::writeElemSection(raw_fd_ostream& OS) {
 }
 
 void Writer::applyCodeRelocations(const ObjectFile &File, OwningArrayRef<uint8_t> &Data) {
+  DEBUG(dbgs() << "applyCodeRelocations: " << File.getName() << "\n");
   for (const WasmRelocation &Reloc: File.CodeSection->Relocations) {
     int64_t NewValue = 0;
     switch (Reloc.Type) {
@@ -601,26 +602,26 @@ void Writer::applyCodeRelocations(const ObjectFile &File, OwningArrayRef<uint8_t
       break;
     }
 
-    DEBUG(dbgs() << "apply reloc: type=" << Reloc.Type
-                 << " index=" << Reloc.Index << " offset=" << Reloc.Offset
-                 << " new=" << NewValue << "\n");
+    DEBUG(dbgs() << "reloc: type=" << Reloc.Type << " index=" << Reloc.Index
+                 << " offset=" << Reloc.Offset << " new=" << NewValue << "\n");
 
     uint8_t *Location = Data.data() + Reloc.Offset;
+
     switch (Reloc.Type) {
     case R_WEBASSEMBLY_TYPE_INDEX_LEB:
     case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
+      assert(decodeULEB128(Location) == Reloc.Index);
     case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
     case R_WEBASSEMBLY_GLOBAL_INDEX_LEB: {
       unsigned Padding = PaddingFor5ByteULEB128(NewValue);
-      DEBUG(dbgs() << "uleb current=" << decodeULEB128(Location) << "\n");
       assert(NewValue >= 0 && NewValue <= UINT32_MAX);
       encodeULEB128(NewValue, Location, Padding);
       break;
     }
     case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
+      assert(decodeSLEB128(Location) == Reloc.Index);
     case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB: {
       unsigned Padding = PaddingFor5ByteSLEB128(NewValue);
-      DEBUG(dbgs() << "sleb current=" << decodeSLEB128(Location) << "\n");
       assert(NewValue >= INT32_MIN && NewValue <= INT32_MAX);
       encodeSLEB128(NewValue, Location, Padding);
       break;

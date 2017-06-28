@@ -61,7 +61,8 @@ const WasmImport& Symbol::getImport() const {
 }
 
 const WasmExport& Symbol::getExport() const {
-  DEBUG(dbgs() << "getExport: " << getName() << " ElementIndex: " << Sym->ElementIndex << "\n");
+  DEBUG(dbgs() << "getExport: " << getName()
+               << " ElementIndex: " << Sym->ElementIndex << "\n");
   assert(isDefined());
   assert(Sym != nullptr);
   assert(isa<ObjectFile>(File));
@@ -71,15 +72,14 @@ const WasmExport& Symbol::getExport() const {
 }
 
 uint32_t Symbol::getOutputIndex() const {
-  if (isWeak())
-    return 0;
   assert(OutputIndexSet);
   return OutputIndex;
 }
 
 void Symbol::setOutputIndex(uint32_t Index) {
   assert(!OutputIndexSet);
-  DEBUG(dbgs() << "assigning index for: " << Name << ": " << Index << " kind=" << toString(SymbolKind) << "\n");
+  DEBUG(dbgs() << "setOutputIndex: " << this << " " << Name << ": " << Index
+               << " kind=" << toString(SymbolKind) << "\n");
   OutputIndex = Index;
   OutputIndexSet = true;
 }
