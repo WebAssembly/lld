@@ -23,6 +23,9 @@ entry:
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         ReturnType:      I32
 ; CHECK-NEXT:         ParamTypes:      
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         ReturnType:      NORESULT
+; CHECK-NEXT:         ParamTypes:      
 ; CHECK-NEXT:   - Type:            FUNCTION
 ; CHECK-NEXT:     FunctionTypes:   [ 0, 0 ]
 ; CHECK-NEXT:   - Type:            MEMORY
