@@ -51,6 +51,9 @@ def z: JoinedOrSeparate<["-"], "z">, MetaVarName<"<option>">,
 def entry: S<"entry">, MetaVarName<"<entry>">,
   HelpText<"Name of entry point symbol">;
 
+def error_limit: J<"error-limit=">,
+  HelpText<"Maximum number of errors to emit before stopping (0 = no limit)">;
+
 // The follow flags are unique to wasm
 
 def global_base: J<"global-base=">,

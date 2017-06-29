@@ -74,17 +74,16 @@ void fatal(const Twine &Msg) {
 void error(const Twine &Msg) {
   std::lock_guard<std::mutex> Lock(Mu);
 
-  if (Config->ErrorLimit == 0 || ErrorCount < Config->ErrorLimit) {
-    print("error: ", raw_ostream::RED);
-    *ErrorOS << Msg << "\n";
-  } else if (ErrorCount == Config->ErrorLimit) {
+  print("error: ", raw_ostream::RED);
+  *ErrorOS << Msg << "\n";
+
+  if (Config->ErrorLimit != 0 && ++ErrorCount >= Config->ErrorLimit) {
     print("error: ", raw_ostream::RED);
     *ErrorOS << "too many errors emitted, stopping now"
              << " (use -error-limit=0 to see all errors)\n";
     exitLld(1);
   }
 
-  ++ErrorCount;
 }
 
 void warn(const Twine &Msg) {

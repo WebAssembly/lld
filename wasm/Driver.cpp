@@ -261,6 +261,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->Verbose = Args.hasArg(OPT_verbose);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);
+  Config->ErrorLimit = getInteger(Args, OPT_error_limit, 20);
   Config->GlobalBase = getInteger(Args, OPT_global_base, 1024);
   Config->MaxMemory = getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize = getZOptionValue(Args, "stack-size", WasmPageSize);

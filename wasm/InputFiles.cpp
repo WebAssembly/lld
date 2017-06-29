@@ -235,10 +235,10 @@ std::string lld::toString(wasm::InputFile *File) {
     return "(internal)";
 
   if (File->ParentName.empty())
-    return File->getName().lower();
+    return File->getName();
 
   std::string Res =
       (getBasename(File->ParentName) + "(" + getBasename(File->getName()) + ")")
           .str();
-  return StringRef(Res).lower();
+  return StringRef(Res);
 }
