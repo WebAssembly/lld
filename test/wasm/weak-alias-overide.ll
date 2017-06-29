@@ -3,15 +3,18 @@
 ; RUN: lld -flavor wasm %t.o %t2.o -o %t.wasm
 ; RUN: obj2yaml %t.wasm | FileCheck %s
 
-; Test that weak aliases (bar is a weak alias of foo) are linked correctly
+; Test that the strongly defined bar is used correctly despite the existence
+; of the weak alias
 
-declare i32 @bar() local_unnamed_addr #1
+define i32 @bar() local_unnamed_addr #1 {
+  ret i32 1
+}
 
 ; Function Attrs: nounwind uwtable
-define i32 @_start() local_unnamed_addr #1 {
+define void @_start() local_unnamed_addr #1 {
 entry:
   %call = tail call i32 @bar() #2
-  ret i32 %call
+  ret void
 }
 
 ; CHECK:      --- !WASM
@@ -23,8 +26,11 @@ entry:
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         ReturnType:      I32
 ; CHECK-NEXT:         ParamTypes:      
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         ReturnType:      NORESULT
+; CHECK-NEXT:         ParamTypes:      
 ; CHECK-NEXT:   - Type:            FUNCTION
-; CHECK-NEXT:     FunctionTypes:   [ 0, 0, 0 ]
+; CHECK-NEXT:     FunctionTypes:   [ 0, 1, 0, 0 ]
 ; CHECK-NEXT:   - Type:            MEMORY
 ; CHECK-NEXT:     Memories:        
 ; CHECK-NEXT:       - Initial:         0x00000002
@@ -42,22 +48,26 @@ entry:
 ; CHECK-NEXT:         Index:           0
 ; CHECK-NEXT:       - Name:            main
 ; CHECK-NEXT:         Kind:            FUNCTION
-; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Functions:       
 ; CHECK-NEXT:       - Locals:          
-; CHECK-NEXT:         Body:            1081808080000B
+; CHECK-NEXT:         Body:            41010B
+; CHECK-NEXT:       - Locals:          
+; CHECK-NEXT:         Body:            1080808080001A0B
 ; CHECK-NEXT:       - Locals:          
 ; CHECK-NEXT:         Body:            41000B
 ; CHECK-NEXT:       - Locals:          
-; CHECK-NEXT:         Body:            1081808080000B
+; CHECK-NEXT:         Body:            1080808080000B
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   
 ; CHECK-NEXT:       - Index:           0
-; CHECK-NEXT:         Name:            _start
+; CHECK-NEXT:         Name:            bar
 ; CHECK-NEXT:       - Index:           1
-; CHECK-NEXT:         Name:            foo
+; CHECK-NEXT:         Name:            _start
 ; CHECK-NEXT:       - Index:           2
+; CHECK-NEXT:         Name:            foo
+; CHECK-NEXT:       - Index:           3
 ; CHECK-NEXT:         Name:            call_bar
 ; CHECK-NEXT: ...

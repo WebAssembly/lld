@@ -120,8 +120,8 @@ public:
   const WasmSection* DataSection = nullptr;
 
   llvm::DenseMap<uint32_t, uint32_t> TypeMap;
-  std::vector<const WasmSymbol*> FunctionImports;
-  std::vector<const WasmSymbol*> GlobalImports;
+  std::vector<StringRef> FunctionImports;
+  std::vector<StringRef> GlobalImports;
 };
 
 // Opens a given file.

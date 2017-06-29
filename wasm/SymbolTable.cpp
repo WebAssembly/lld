@@ -37,7 +37,6 @@ void SymbolTable::reportRemainingUndefines() {
   SmallPtrSet<Symbol *, 8> Undefs;
   for (auto &I : Symtab) {
     Symbol *Sym = I.second;
-    DEBUG(dbgs() << "checking sym: " << *Sym << "\n");
     if (Sym->isUndefined() && !Sym->isLazy() && !Sym->isWeak() &&
         Config->AllowUndefinedSymbols.count(Sym->getName()) == 0) {
       Undefs.insert(Sym);
@@ -136,9 +135,11 @@ Symbol *SymbolTable::addDefined(InputFile *F, const WasmSymbol *Sym) {
       // The existing symbol is defined.
       if (Sym->isWeak()) {
         // the new symbol is weak we can ignore it
+        DEBUG(dbgs() << "existing symbol takes precensence\n");
       } else if (S->isWeak()) {
         // the new symbol is not weak and the existing symbol is, so we replace
         // it
+        DEBUG(dbgs() << "replacing existing weak symbol\n");
         S->update(Kind, F, Sym);
       } else {
         // niether symbol is week. They conflict.

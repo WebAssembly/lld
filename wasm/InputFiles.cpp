@@ -66,16 +66,16 @@ bool ObjectFile::isImportedGlobal(uint32_t index) const {
 bool ObjectFile::isResolvedFunctionImport(uint32_t index) const {
   if (!isImportedFunction(index))
     return false;
-  const WasmSymbol *WasmSym = FunctionImports[index];
-  Symbol* Sym = Symtab->find(WasmSym->Name);
+  StringRef Name = FunctionImports[index];
+  Symbol* Sym = Symtab->find(Name);
   return Sym->isDefined();
 }
 
 bool ObjectFile::isResolvedGlobalImport(uint32_t index) const {
   if (!isImportedGlobal(index))
     return false;
-  const WasmSymbol *WasmSym = GlobalImports[index];
-  Symbol* Sym = Symtab->find(WasmSym->Name);
+  StringRef Name = GlobalImports[index];
+  Symbol* Sym = Symtab->find(Name);
   return Sym->isDefined();
 }
 
@@ -92,8 +92,8 @@ int32_t ObjectFile::getGlobalAddress(uint32_t index) const {
 
 uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
   if (isImportedFunction(original)) {
-    const WasmSymbol *WasmSym = FunctionImports[original];
-    Symbol* Sym = Symtab->find(WasmSym->Name);
+    StringRef Name = FunctionImports[original];
+    Symbol* Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   } else {
@@ -112,8 +112,8 @@ uint32_t ObjectFile::relocateTableIndex(uint32_t original) const {
 
 uint32_t ObjectFile::relocateGlobalIndex(uint32_t original) const {
   if (isImportedGlobal(original)) {
-    const WasmSymbol *WasmSym = GlobalImports[original];
-    Symbol* Sym = Symtab->find(WasmSym->Name);
+    StringRef Name = GlobalImports[original];
+    Symbol* Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   } else {
@@ -156,15 +156,24 @@ void ObjectFile::initializeSymbols() {
   uint32_t NumSymbols = WasmObj->getNumberOfSymbols();
   Symbols.reserve(NumSymbols);
 
+  for (const WasmImport &Import: WasmObj->imports()) {
+    switch (Import.Kind) {
+    case WASM_EXTERNAL_FUNCTION:
+      FunctionImports.emplace_back(Import.Field);
+      break;
+    case WASM_EXTERNAL_GLOBAL:
+      GlobalImports.emplace_back(Import.Field);
+      break;
+    }
+  }
+
   for (const SymbolRef &Sym: WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
     switch (WasmSym.Type) {
       case WasmSymbol::SymbolType::FUNCTION_IMPORT:
-        FunctionImports.emplace_back(&WasmSym);
         createUndefined(WasmSym);
         break;
       case WasmSymbol::SymbolType::GLOBAL_IMPORT:
-        GlobalImports.emplace_back(&WasmSym);
         createUndefined(WasmSym);
         break;
       case WasmSymbol::SymbolType::FUNCTION_EXPORT:
