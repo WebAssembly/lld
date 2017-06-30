@@ -10,7 +10,7 @@ target_link_libraries(lld
   lldDriver
   lldCOFF
   lldELF
-  lldwasm
+  lldWasm
   )
 
 install(TARGETS lld
