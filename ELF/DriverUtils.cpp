@@ -206,4 +206,3 @@ Optional<std::string> elf::searchLibrary(StringRef Name) {
   }
   return None;
 }
-
