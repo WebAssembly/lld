@@ -481,20 +481,31 @@ void LinkerScript::fabricateDefaultCommands() {
 
 // Add sections that didn't match any sections command.
 void LinkerScript::addOrphanSections(OutputSectionFactory &Factory) {
+  unsigned NumCommands = Opt.Commands.size();
   for (InputSectionBase *S : InputSections) {
     if (!S->Live || S->Parent)
       continue;
     StringRef Name = getOutputSectionName(S->Name);
-    auto I = std::find_if(
-        Opt.Commands.begin(), Opt.Commands.end(), [&](BaseCommand *Base) {
-          if (auto *Cmd = dyn_cast<OutputSectionCommand>(Base))
-            return Cmd->Name == Name;
-          return false;
-        });
-    if (I == Opt.Commands.end()) {
+    auto End = Opt.Commands.begin() + NumCommands;
+    auto I = std::find_if(Opt.Commands.begin(), End, [&](BaseCommand *Base) {
+      if (auto *Cmd = dyn_cast<OutputSectionCommand>(Base))
+        return Cmd->Name == Name;
+      return false;
+    });
+    OutputSectionCommand *Cmd;
+    if (I == End) {
       Factory.addInputSec(S, Name);
+      OutputSection *Sec = S->getOutputSection();
+      assert(Sec->SectionIndex == INT_MAX);
+      OutputSectionCommand *&CmdRef = SecToCommand[Sec];
+      if (!CmdRef) {
+        CmdRef = createOutputSectionCommand(Sec->Name, "<internal>");
+        CmdRef->Sec = Sec;
+        Opt.Commands.push_back(CmdRef);
+      }
+      Cmd = CmdRef;
     } else {
-      auto *Cmd = cast<OutputSectionCommand>(*I);
+      Cmd = cast<OutputSectionCommand>(*I);
       Factory.addInputSec(S, Name, Cmd->Sec);
       if (OutputSection *Sec = Cmd->Sec) {
         SecToCommand[Sec] = Cmd;
@@ -502,10 +513,10 @@ void LinkerScript::addOrphanSections(OutputSectionFactory &Factory) {
         assert(Sec->SectionIndex == INT_MAX || Sec->SectionIndex == Index);
         Sec->SectionIndex = Index;
       }
-      auto *ISD = make<InputSectionDescription>("");
-      ISD->Sections.push_back(cast<InputSection>(S));
-      Cmd->Commands.push_back(ISD);
     }
+    auto *ISD = make<InputSectionDescription>("");
+    ISD->Sections.push_back(cast<InputSection>(S));
+    Cmd->Commands.push_back(ISD);
   }
 }
 
@@ -746,28 +757,18 @@ void LinkerScript::adjustSectionsAfterSorting() {
     if (!Cmd)
       continue;
 
-    if (Cmd->Phdrs.empty())
-      Cmd->Phdrs = DefPhdrs;
-    else
+    if (Cmd->Phdrs.empty()) {
+      OutputSection *Sec = Cmd->Sec;
+      // To match the bfd linker script behaviour, only propagate program
+      // headers to sections that are allocated.
+      if (Sec && (Sec->Flags & SHF_ALLOC))
+        Cmd->Phdrs = DefPhdrs;
+    } else {
       DefPhdrs = Cmd->Phdrs;
+    }
   }
 
   removeEmptyCommands();
-}
-
-void LinkerScript::createOrphanCommands() {
-  for (OutputSection *Sec : OutputSections) {
-    if (Sec->SectionIndex != INT_MAX)
-      continue;
-    OutputSectionCommand *Cmd =
-        createOutputSectionCommand(Sec->Name, "<internal>");
-    Cmd->Sec = Sec;
-    SecToCommand[Sec] = Cmd;
-    auto *ISD = make<InputSectionDescription>("");
-    ISD->Sections = Sec->Sections;
-    Cmd->Commands.push_back(ISD);
-    Opt.Commands.push_back(Cmd);
-  }
 }
 
 void LinkerScript::processNonSectionCommands() {
@@ -779,22 +780,25 @@ void LinkerScript::processNonSectionCommands() {
   }
 }
 
-static bool
-allocateHeaders(std::vector<PhdrEntry> &Phdrs,
-                ArrayRef<OutputSectionCommand *> OutputSectionCommands,
-                uint64_t Min) {
-  auto FirstPTLoad =
-      std::find_if(Phdrs.begin(), Phdrs.end(),
-                   [](const PhdrEntry &E) { return E.p_type == PT_LOAD; });
+void LinkerScript::allocateHeaders(std::vector<PhdrEntry> &Phdrs) {
+  uint64_t Min = std::numeric_limits<uint64_t>::max();
+  for (OutputSectionCommand *Cmd : OutputSectionCommands) {
+    OutputSection *Sec = Cmd->Sec;
+    if (Sec->Flags & SHF_ALLOC)
+      Min = std::min<uint64_t>(Min, Sec->Addr);
+  }
+
+  auto FirstPTLoad = llvm::find_if(
+      Phdrs, [](const PhdrEntry &E) { return E.p_type == PT_LOAD; });
   if (FirstPTLoad == Phdrs.end())
-    return false;
+    return;
 
   uint64_t HeaderSize = getHeaderSize();
   if (HeaderSize <= Min || Script->hasPhdrsCommands()) {
     Min = alignDown(Min - HeaderSize, Config->MaxPageSize);
     Out::ElfHeader->Addr = Min;
     Out::ProgramHeaders->Addr = Min + Out::ElfHeader->Size;
-    return true;
+    return;
   }
 
   assert(FirstPTLoad->First == Out::ElfHeader);
@@ -817,15 +821,13 @@ allocateHeaders(std::vector<PhdrEntry> &Phdrs,
     Phdrs.erase(FirstPTLoad);
   }
 
-  auto PhdrI = std::find_if(Phdrs.begin(), Phdrs.end(), [](const PhdrEntry &E) {
-    return E.p_type == PT_PHDR;
-  });
+  auto PhdrI = llvm::find_if(
+      Phdrs, [](const PhdrEntry &E) { return E.p_type == PT_PHDR; });
   if (PhdrI != Phdrs.end())
     Phdrs.erase(PhdrI);
-  return false;
 }
 
-void LinkerScript::assignAddresses(std::vector<PhdrEntry> &Phdrs) {
+void LinkerScript::assignAddresses() {
   // Assign addresses as instructed by linker script SECTIONS sub-commands.
   Dot = 0;
   ErrorOnMissingSection = true;
@@ -845,15 +847,6 @@ void LinkerScript::assignAddresses(std::vector<PhdrEntry> &Phdrs) {
     auto *Cmd = cast<OutputSectionCommand>(Base);
     assignOffsets(Cmd);
   }
-
-  uint64_t MinVA = std::numeric_limits<uint64_t>::max();
-  for (OutputSectionCommand *Cmd : OutputSectionCommands) {
-    OutputSection *Sec = Cmd->Sec;
-    if (Sec->Flags & SHF_ALLOC)
-      MinVA = std::min<uint64_t>(MinVA, Sec->Addr);
-  }
-
-  allocateHeaders(Phdrs, OutputSectionCommands, MinVA);
 }
 
 // Creates program headers as instructed by PHDRS linker script command.
@@ -880,8 +873,6 @@ std::vector<PhdrEntry> LinkerScript::createPhdrs() {
   // Add output sections to program headers.
   for (OutputSectionCommand *Cmd : OutputSectionCommands) {
     OutputSection *Sec = Cmd->Sec;
-    if (!(Sec->Flags & SHF_ALLOC))
-      break;
 
     // Assign headers specified by linker script
     for (size_t Id : getPhdrIndices(Sec)) {
