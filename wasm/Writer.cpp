@@ -313,10 +313,10 @@ static void write_export(const WasmExport& Export, raw_fd_ostream& OS) {
       write_uleb128(Export.Index, OS, "function index");
       break;
     case WASM_EXTERNAL_GLOBAL:
-      write_sleb128(Export.Index, OS, "global index");
+      write_uleb128(Export.Index, OS, "global index");
       break;
     case WASM_EXTERNAL_MEMORY:
-      write_sleb128(Export.Index, OS, "memory index");
+      write_uleb128(Export.Index, OS, "memory index");
       break;
     default:
       fatal("unsupported export type: " + Twine(Export.Kind));
@@ -471,7 +471,10 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
   // Memory is and main function are exported for executables.
   bool ExportMemory = !Config->Relocatable && !Config->ImportMemory;
   bool ExportMain = !Config->Relocatable;
-  bool ExportOther = Config->Relocatable;
+  bool ExportOther = true; //Config->Relocatable;
+
+  if (Config->Entry == Config->ExportEntryAs && ExportOther)
+    ExportMain = false;
 
   uint32_t NumExports = 0;
 
@@ -482,9 +485,14 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
     NumExports += 1;
 
   if (ExportOther) {
-    for (ObjectFile *File : Symtab->ObjectFiles)
-      for (const Symbol *Sym : File->getSymbols())
-        if (Sym->isDefined()) NumExports++;
+    for (ObjectFile *File : Symtab->ObjectFiles) {
+      for (Symbol *Sym : File->getSymbols()) {
+         if (!Sym->isFunction() || Sym->isUndefined() || Sym->WrittenToSymtab)
+           continue;
+         Sym->WrittenToSymtab = true;
+         NumExports++;
+      }
+    }
   }
 
   if (!NumExports)
@@ -506,18 +514,26 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
 
-    WasmExport MainExport;
-    MainExport.Name = Config->ExportEntryAs;
-    MainExport.Kind = WASM_EXTERNAL_FUNCTION;
-    MainExport.Index = Sym->getOutputIndex();
-    write_export(MainExport, OS);
+    if (Config->Entry != Config->ExportEntryAs || !ExportOther) {
+      Symbol* ExportAs = Symtab->find(Config->ExportEntryAs);
+      if (ExportAs && ExportAs->isDefined()) {
+        warn("can't export entry point");
+        fatal("already an existing exported symbol: " + Config->ExportEntryAs);
+      }
+      WasmExport MainExport;
+      MainExport.Name = Config->ExportEntryAs;
+      MainExport.Kind = WASM_EXTERNAL_FUNCTION;
+      MainExport.Index = Sym->getOutputIndex();
+      write_export(MainExport, OS);
+    }
   }
 
   if (ExportOther) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
-      for (const Symbol *Sym : File->getSymbols()) {
-        if (Sym->isUndefined())
+      for (Symbol *Sym : File->getSymbols()) {
+        if (!Sym->isFunction() || Sym->isUndefined() || !Sym->WrittenToSymtab)
           continue;
+        Sym->WrittenToSymtab = false;
         log("Export: " + Sym->getName());
         WasmExport Export;
         Export.Name = Sym->getName();
@@ -744,9 +760,11 @@ void Writer::writeLinkingSection(raw_fd_ostream& OS) {
   write_uleb128(DataSize, OS, "data size");
   endSection(SubSection, OS);
 
-  SubSection = writeSectionHeader(WASM_DATA_ALIGNMENT, OS);
-  write_uleb128(DataAlignment, OS, "data alignment");
-  endSection(SubSection, OS);
+  if (Config->Relocatable) {
+    SubSection = writeSectionHeader(WASM_DATA_ALIGNMENT, OS);
+    write_uleb128(DataAlignment, OS, "data alignment");
+    endSection(SubSection, OS);
+  }
 
   endSection(Section, OS);
 }
@@ -764,9 +782,9 @@ void Writer::writeNameSection(raw_fd_ostream& OS) {
       Symbol* S = Symtab->find(WasmSym.Name);
       if (S) {
         assert(S);
-        if (S->WrittenToSymtab)
+        if (S->WrittenToNameSec)
           continue;
-        S->WrittenToSymtab = true;
+        S->WrittenToNameSec = true;
       }
       FunctionNameCount++;
     }
@@ -793,14 +811,14 @@ void Writer::writeNameSection(raw_fd_ostream& OS) {
           continue;
         Symbol* S = Symtab->find(WasmSym.Name);
         if (S) {
-          if (!S->WrittenToSymtab)
+          if (!S->WrittenToNameSec)
             continue;
-          S->WrittenToSymtab = false;
+          S->WrittenToNameSec = false;
         }
-        write_uleb128(File->relocateFunctionIndex(Sym.getValue()), OS, "func index");
         Expected<StringRef> NameOrError = Sym.getName();
         if (!NameOrError)
           fatal("error getting symbol name");
+        write_uleb128(File->relocateFunctionIndex(Sym.getValue()), OS, "func index");
         write_str(*NameOrError, OS, "symbol name");
       }
     }
@@ -825,8 +843,7 @@ void Writer::writeSections(raw_fd_ostream& OS) {
   // Optional, custom sections for relocations and debug names
   if (Config->EmitRelocs || Config->Relocatable)
     writeRelocSections(OS);
-  if (Config->Relocatable)
-    writeLinkingSection(OS);
+  writeLinkingSection(OS);
   if (!Config->StripDebug && !Config->StripAll)
     writeNameSection(OS);
 }
@@ -850,7 +867,7 @@ void Writer::layoutMemory() {
       File->DataOffset = MemoryPtr;
       MemoryPtr += Size;
     } else {
-      debug_print("mem: no data\n");
+      debug_print("mem: [%s] no data\n", File->getName().str().c_str());
     }
   }
 
@@ -861,6 +878,7 @@ void Writer::layoutMemory() {
 
   // Stack comes last
   if (!Config->Relocatable) {
+    debug_print("mem: stack size  = %d\n", Config->ZStackSize);
     debug_print("mem: stack base  = %d\n", MemoryPtr);
     MemoryPtr += Config->ZStackSize;
     Config->SyntheticGlobals[0].second.InitExpr.Value.Int32 = MemoryPtr;
@@ -869,7 +887,6 @@ void Writer::layoutMemory() {
 
   uint32_t MemSize = alignTo(MemoryPtr, WasmPageSize);
   TotalMemoryPages = MemSize / WasmPageSize;
-  debug_print("mem: total size  = %d\n", MemSize);
   debug_print("mem: total pages = %d\n", TotalMemoryPages);
 }
 
@@ -970,6 +987,7 @@ void Writer::calculateTypes() {
 
 void Writer::assignSymbolIndexes() {
   for (ObjectFile *File : Symtab->ObjectFiles) {
+    DEBUG(dbgs() << "assignSymbolIndexes: " << File->getName() << "\n");
     for (Symbol *Sym : File->getSymbols()) {
       if (Sym->hasOutputIndex() || !Sym->isDefined())
         continue;
@@ -977,9 +995,10 @@ void Writer::assignSymbolIndexes() {
       if (Sym->getFile() && isa<ObjectFile>(Sym->getFile())) {
         ObjectFile* Obj = dyn_cast<ObjectFile>(Sym->getFile());
         if (Sym->isFunction())
-          Sym->setOutputIndex(Obj->FunctionIndexOffset + Sym->getFunctionIndex());
+          Sym->setOutputIndex(
+              Obj->relocateFunctionIndex(Sym->getFunctionIndex()));
         else
-          Sym->setOutputIndex(Obj->GlobalIndexOffset + Sym->getGlobalIndex());
+          Sym->setOutputIndex(Obj->relocateGlobalIndex(Sym->getGlobalIndex()));
       }
     }
   }
@@ -995,14 +1014,21 @@ void Writer::run() {
   calculateImports();
   log("-- calculateOffsets");
   calculateOffsets();
+
+  if (Config->Verbose) {
+    log("TotalFunctions : " + Twine(TotalFunctions));
+    log("TotalGlobals   : " + Twine(TotalGlobals));
+    log("TotalImports   : " + Twine(FunctionImports.size() + GlobalImports.size()));
+    log("FunctionImports: " + Twine(FunctionImports.size()));
+    log("GlobalImports  : " + Twine(GlobalImports.size()));
+    for (ObjectFile *File: Symtab->ObjectFiles)
+      File->dumpInfo();
+  }
+
   log("-- assignSymbolIndexes");
   assignSymbolIndexes();
   log("-- layoutMemory");
   layoutMemory();
-
-  if (Config->Verbose)
-    for (ObjectFile *File: Symtab->ObjectFiles)
-      File->dumpInfo();
 
   log("-- openFile");
   openFile();

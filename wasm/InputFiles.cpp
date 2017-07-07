@@ -91,12 +91,14 @@ int32_t ObjectFile::getGlobalAddress(uint32_t index) const {
 }
 
 uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
+  DEBUG(dbgs() << "relocateFunctionIndex: " << original << "\n");
   if (isImportedFunction(original)) {
     StringRef Name = FunctionImports[original];
     Symbol* Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   } else {
+    DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " " << (original + FunctionIndexOffset) << "\n");
     return original + FunctionIndexOffset;
   }
 }

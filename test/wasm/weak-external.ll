@@ -56,6 +56,12 @@ entry:
 ; CHECK-NEXT:       - Name:            main
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:       - Name:            get_address_of_foo
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            _start
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:   - Type:            ELEM
 ; CHECK-NEXT:     Segments:        
 ; CHECK-NEXT:       - Offset:          
@@ -68,4 +74,9 @@ entry:
 ; CHECK-NEXT:         Body:            4181808080000B
 ; CHECK-NEXT:       - Locals:
 ; CHECK-NEXT:         Body:            4100280280808080000B
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            linking
+; CHECK-NEXT:     DataSize:        0
+; CHECK-NEXT:     DataAlignment:   0
+; CHECK-NEXT:     SymbolInfo:  
 ; CHECK-NEXT: ...

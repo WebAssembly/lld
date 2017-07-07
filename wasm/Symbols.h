@@ -39,7 +39,7 @@ public:
   };
 
   Symbol(StringRef Name)
-      : WrittenToSymtab(0), Name(Name), ArchiveSymbol(nullptr, 0, 0) {}
+      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name), ArchiveSymbol(nullptr, 0, 0) {}
 
   Kind getKind() const { return SymbolKind; }
 
@@ -76,6 +76,7 @@ public:
   // This bit is used by Writer::writeNameSection() to prevent
   // symbols from being written to the symbol table more than once.
   unsigned WrittenToSymtab : 1;
+  unsigned WrittenToNameSec : 1;
 
 protected:
   const WasmImport &getImport() const;

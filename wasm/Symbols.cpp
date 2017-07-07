@@ -81,7 +81,7 @@ uint32_t Symbol::getOutputIndex() const {
 
 void Symbol::setOutputIndex(uint32_t Index) {
   assert(!OutputIndexSet);
-  DEBUG(dbgs() << "setOutputIndex: " << this << " " << Name << ": " << Index
+  DEBUG(dbgs() << "setOutputIndex: " << Index << ": " << Name
                << " kind=" << toString(SymbolKind) << "\n");
   OutputIndex = Index;
   OutputIndexSet = true;

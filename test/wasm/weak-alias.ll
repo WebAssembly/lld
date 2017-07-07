@@ -43,6 +43,18 @@ entry:
 ; CHECK-NEXT:       - Name:            main
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            bar
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:       - Name:            _start
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            foo
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:       - Name:            call_bar
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           2
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Functions:       
 ; CHECK-NEXT:       - Locals:          
@@ -51,6 +63,11 @@ entry:
 ; CHECK-NEXT:         Body:            41000B
 ; CHECK-NEXT:       - Locals:          
 ; CHECK-NEXT:         Body:            1081808080000B
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            linking
+; CHECK-NEXT:     DataSize:        0
+; CHECK-NEXT:     DataAlignment:   0
+; CHECK-NEXT:     SymbolInfo:    
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   

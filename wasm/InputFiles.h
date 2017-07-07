@@ -113,7 +113,7 @@ public:
 
   int32_t FunctionIndexOffset = 0;
   int32_t GlobalIndexOffset = 0;
-  uint32_t TableIndexOffset = 0;
+  int32_t TableIndexOffset = 0;
   uint32_t CodeSectionOffset = 0;
   uint32_t DataOffset = 0;
   const WasmSection* CodeSection = nullptr;
