@@ -20,39 +20,52 @@ entry:
     ret i32 %0
 }
 
-; CHECK: --- !WASM
-; CHECK: FileHeader:
-; CHECK:   Version:         0x00000001
-; CHECK: Sections:
-; CHECK:   - Type:            TYPE
-; CHECK:     Signatures:
-; CHECK:       - Index:           0
-; CHECK:         ReturnType:      I32
-; CHECK:         ParamTypes:
-; CHECK:   - Type:            FUNCTION
-; CHECK:     FunctionTypes:   [ 0, 0 ]
-; CHECK:   - Type:            MEMORY
-; CHECK:     Memories:
-; CHECK:       - Initial:         0x00000002
-; CHECK:   - Type:            GLOBAL
-; CHECK:     Globals:
-; CHECK:       - Type:            I32
-; CHECK:         Mutable:         true
-; CHECK:         InitExpr:
-; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           66560
-; CHECK:   - Type:            EXPORT
-; CHECK:     Exports:
-; CHECK:       - Name:            memory
-; CHECK:         Kind:            MEMORY
-; CHECK:         Index:           0
-; CHECK:       - Name:            main
-; CHECK:         Kind:            FUNCTION
-; CHECK:         Index:           1
-; CHECK:   - Type:            CODE
-; CHECK:     Functions:
-; CHECK:       - Locals:
-; CHECK:         Body:            4180808080000B
-; CHECK:       - Locals:
-; CHECK:         Body:            4100280280808080000B
-; CHECK: ...
+; CHECK:      --- !WASM
+; CHECK-NEXT: FileHeader:
+; CHECK-NEXT:   Version:         0x00000001
+; CHECK-NEXT: Sections:
+; CHECK-NEXT:   - Type:            TYPE
+; CHECK-NEXT:     Signatures:
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         ReturnType:      I32
+; CHECK-NEXT:         ParamTypes:
+; CHECK-NEXT:   - Type:            FUNCTION
+; CHECK-NEXT:     FunctionTypes:   [ 0, 0 ]
+; CHECK-NEXT:   - Type:            TABLE
+; CHECK-NEXT:     Tables:          
+; CHECK-NEXT:       - ElemType:        ANYFUNC
+; CHECK-NEXT:         Limits:          
+; CHECK-NEXT:           Flags:           0x00000001
+; CHECK-NEXT:           Initial:         0x00000002
+; CHECK-NEXT:           Maximum:         0x00000002
+; CHECK-NEXT:   - Type:            MEMORY
+; CHECK-NEXT:     Memories:
+; CHECK-NEXT:       - Initial:         0x00000002
+; CHECK-NEXT:   - Type:            GLOBAL
+; CHECK-NEXT:     Globals:
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         true
+; CHECK-NEXT:         InitExpr:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           66560
+; CHECK-NEXT:   - Type:            EXPORT
+; CHECK-NEXT:     Exports:
+; CHECK-NEXT:       - Name:            memory
+; CHECK-NEXT:         Kind:            MEMORY
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            main
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:   - Type:            ELEM
+; CHECK-NEXT:     Segments:        
+; CHECK-NEXT:       - Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1
+; CHECK-NEXT:         Functions:       [ 0 ]
+; CHECK-NEXT:   - Type:            CODE
+; CHECK-NEXT:     Functions:
+; CHECK-NEXT:       - Locals:
+; CHECK-NEXT:         Body:            4181808080000B
+; CHECK-NEXT:       - Locals:
+; CHECK-NEXT:         Body:            4100280280808080000B
+; CHECK-NEXT: ...

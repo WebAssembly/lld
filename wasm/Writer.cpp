@@ -108,6 +108,7 @@ private:
   uint32_t TotalDataSegments = 0;
   uint32_t TotalCodeRelocations = 0;
   uint32_t TotalDataRelocations = 0;
+  uint32_t InitialTableOffset = 0;
 
   SymbolTable *Symtab;
   std::vector<const WasmSignature*> Types;
@@ -454,7 +455,7 @@ void Writer::writeGlobalSection(raw_fd_ostream& OS) {
 }
 
 void Writer::writeTableSection(raw_fd_ostream& OS) {
-  if (!TotalTableLength)
+  if (TotalTableLength == InitialTableOffset)
     return;
   SectionBookkeeping Section = writeSectionHeader(WASM_SEC_TABLE, OS);
   write_uleb128(1, OS, "table count");
@@ -558,14 +559,15 @@ void Writer::writeElemSection(raw_fd_ostream& OS) {
   write_uleb128(0, OS, "table index");
   WasmInitExpr InitExpr;
   InitExpr.Opcode = WASM_OPCODE_I32_CONST;
-  InitExpr.Value.Int32 = 0;
+  InitExpr.Value.Int32 = InitialTableOffset;
   write_init_expr(InitExpr, OS);
   write_uleb128(TotalElements, OS, "elem count");
 
   for (ObjectFile *File: Symtab->ObjectFiles) {
     for (const WasmElemSegment &Segment: File->getWasmObj()->elements()) {
       for (uint64_t FunctionIndex: Segment.Functions) {
-        write_uleb128(FunctionIndex, OS, "function index");
+        write_uleb128(File->relocateFunctionIndex(FunctionIndex), OS,
+                      "function index");
       }
     }
   }
@@ -585,10 +587,10 @@ void Writer::applyCodeRelocations(const ObjectFile &File, OwningArrayRef<uint8_t
       break;
     case R_WEBASSEMBLY_TABLE_INDEX_I32:
     case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-      NewValue = File.relocateTableIndex(Reloc.Index) + Reloc.Addend;
+      NewValue = File.relocateTableIndex(Reloc.Index);
       break;
     case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
-      NewValue = File.relocateGlobalIndex(Reloc.Index) + Reloc.Addend;
+      NewValue = File.relocateGlobalIndex(Reloc.Index);
       break;
     case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
     case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
@@ -851,6 +853,11 @@ void Writer::layoutMemory() {
     }
   }
 
+  DataSize = MemoryPtr;
+  if (!Config->Relocatable)
+    DataSize -= Config->GlobalBase;
+  debug_print("mem: static data = %d\n", DataSize);
+
   // Stack comes last
   if (!Config->Relocatable) {
     debug_print("mem: stack base  = %d\n", MemoryPtr);
@@ -859,7 +866,6 @@ void Writer::layoutMemory() {
     debug_print("mem: stack top   = %d\n", MemoryPtr);
   }
 
-  DataSize = MemoryPtr;
   uint32_t MemSize = alignTo(MemoryPtr, WasmPageSize);
   TotalMemoryPages = MemSize / WasmPageSize;
   debug_print("mem: total size  = %d\n", MemSize);
@@ -868,6 +874,7 @@ void Writer::layoutMemory() {
 
 void Writer::calculateOffsets() {
   TotalGlobals = Config->SyntheticGlobals.size();
+  TotalTableLength = InitialTableOffset;
 
   for (ObjectFile *File: Symtab->ObjectFiles) {
     const WasmObjectFile* WasmFile = File->getWasmObj();
@@ -899,8 +906,8 @@ void Writer::calculateOffsets() {
     if (TableCount) {
       if (TableCount > 1)
         fatal(File->getName() + ": contains more than one table");
-      else
-        TotalTableLength += WasmFile->tables()[0].Limits.Initial;
+      File->TableIndexOffset = TotalTableLength;
+      TotalTableLength += WasmFile->tables()[0].Limits.Initial;
     }
 
     // Elem
@@ -978,6 +985,9 @@ void Writer::assignSymbolIndexes() {
 }
 
 void Writer::run() {
+  if (!Config->Relocatable)
+    InitialTableOffset = 1;
+
   log("-- calculateTypes");
   calculateTypes();
   log("-- calculateImports");

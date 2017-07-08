@@ -72,6 +72,9 @@ const WasmExport& Symbol::getExport() const {
 }
 
 uint32_t Symbol::getOutputIndex() const {
+  if (isUndefined() && isWeak()) {
+    return 0;
+  }
   assert(OutputIndexSet);
   return OutputIndex;
 }
