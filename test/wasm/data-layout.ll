@@ -29,12 +29,14 @@ target triple = "wasm32-unknown-unknown-wasm"
 
 ; CHECK:       - Type:            DATA
 ; CHECK-NEXT:     Segments:        
-; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:       - SectionOffset:     6
+; CHECK-NEXT:         MemoryIndex:       0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:         Content:         68656C6C6F0A00
-; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:       - SectionOffset:     18
+; CHECK-NEXT:         MemoryIndex:       0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           16

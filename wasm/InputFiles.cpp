@@ -123,10 +123,6 @@ uint32_t ObjectFile::relocateGlobalIndex(uint32_t original) const {
   }
 }
 
-uint32_t ObjectFile::relocateCodeOffset(uint32_t original) const {
-  return original + CodeSectionOffset;
-}
-
 void ObjectFile::parse() {
   // Parse a memory buffer as a wasm file.
   DEBUG(dbgs() << "Parsing object: " << toString(this) << "\n");

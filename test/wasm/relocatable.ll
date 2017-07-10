@@ -15,6 +15,9 @@ entry:
 
 declare i32 @foo_import() local_unnamed_addr #1
 
+@func_addr1 = hidden global i32()* @my_func, align 4
+@func_addr2 = hidden global i32()* @foo_import, align 4
+
 ; CHECK:      --- !WASM
 ; CHECK-NEXT: FileHeader:      
 ; CHECK-NEXT:   Version:         0x00000001
@@ -43,6 +46,13 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         SigIndex:        2
 ; CHECK-NEXT:   - Type:            FUNCTION
 ; CHECK-NEXT:     FunctionTypes:   [ 0, 2 ]
+; CHECK-NEXT:   - Type:            TABLE
+; CHECK-NEXT:     Tables:          
+; CHECK-NEXT:       - ElemType:        ANYFUNC
+; CHECK-NEXT:         Limits:          
+; CHECK-NEXT:           Flags:           0x00000001
+; CHECK-NEXT:           Initial:         0x00000002
+; CHECK-NEXT:           Maximum:         0x00000002
 ; CHECK-NEXT:   - Type:            MEMORY
 ; CHECK-NEXT:     Memories:        
 ; CHECK-NEXT:       - Initial:         0x00000001
@@ -53,6 +63,16 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         InitExpr:        
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           8
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           12
 ; CHECK-NEXT:   - Type:            EXPORT
 ; CHECK-NEXT:     Exports:         
 ; CHECK-NEXT:       - Name:            hello
@@ -61,6 +81,12 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Name:            my_func
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           3
+; CHECK-NEXT:   - Type:            ELEM
+; CHECK-NEXT:     Segments:        
+; CHECK-NEXT:       - Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           0
+; CHECK-NEXT:         Functions:       [ 3, 1 ]
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Relocations:     
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_GLOBAL_ADDR_SLEB
@@ -78,16 +104,30 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Locals:          
 ; CHECK-NEXT:         Body:          {{.*}}
 ; CHECK-NEXT:   - Type:            DATA
+; CHECK-NEXT:     Relocations:     
+; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_TABLE_INDEX_I32
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:         Offset:          0x00000012
+; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_TABLE_INDEX_I32
+; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:         Offset:          0x00000016
 ; CHECK-NEXT:     Segments:        
-; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:       - SectionOffset:     6
+; CHECK-NEXT:         MemoryIndex:       0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:         Content:         68656C6C6F0A00
+; CHECK-NEXT:       - SectionOffset:     18
+; CHECK-NEXT:         MemoryIndex:       0
+; CHECK-NEXT:         Offset:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           8
+; CHECK-NEXT:         Content:         '0000000001000000'
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
-; CHECK-NEXT:     DataSize:        7
-; CHECK-NEXT:     DataAlignment:   1
+; CHECK-NEXT:     DataSize:        16
+; CHECK-NEXT:     DataAlignment:   4
 ; CHECK-NEXT:     SymbolInfo:      
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name

@@ -101,7 +101,6 @@ public:
   uint32_t relocateFunctionIndex(uint32_t original) const;
   uint32_t relocateGlobalIndex(uint32_t original) const;
   uint32_t relocateTableIndex(uint32_t original) const;
-  uint32_t relocateCodeOffset(uint32_t original) const;
   uint32_t relocateDataLocation(uint32_t original) const;
 
   int32_t getGlobalAddress(uint32_t index) const;
@@ -114,7 +113,6 @@ public:
   int32_t FunctionIndexOffset = 0;
   int32_t GlobalIndexOffset = 0;
   int32_t TableIndexOffset = 0;
-  uint32_t CodeSectionOffset = 0;
   uint32_t DataOffset = 0;
   const WasmSection* CodeSection = nullptr;
   const WasmSection* DataSection = nullptr;

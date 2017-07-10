@@ -27,76 +27,83 @@ entry:
   ret void
 }
 
-; CHECK: !WASM
-; CHECK: FileHeader:      
-; CHECK:   Version:         0x00000001
-; CHECK: Sections:        
-; CHECK:   - Type:            TYPE
-; CHECK:     Signatures:      
-; CHECK:       - Index:           0
-; CHECK:         ReturnType:      I32
-; CHECK:         ParamTypes:      
-; CHECK:       - Index:           1
-; CHECK:         ReturnType:      NORESULT
-; CHECK:         ParamTypes:      
-; CHECK:   - Type:            FUNCTION
-; CHECK:     FunctionTypes:   [ 0, 1, 0, 1 ]
-; CHECK:   - Type:            TABLE
-; CHECK:     Tables:          
-; CHECK:       - ElemType:        ANYFUNC
-; CHECK:         Limits:          
-; CHECK:           Flags:           0x00000001
-; CHECK:           Initial:         0x00000003
-; CHECK:           Maximum:         0x00000003
-; CHECK:   - Type:            MEMORY
-; CHECK:     Memories:        
-; CHECK:       - Initial:         0x00000002
-; CHECK:   - Type:            GLOBAL
-; CHECK:     Globals:         
-; CHECK:       - Type:            I32
-; CHECK:         Mutable:         true
-; CHECK:         InitExpr:        
-; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           66568
-; CHECK:   - Type:            EXPORT
-; CHECK:     Exports:         
-; CHECK:       - Name:            memory
-; CHECK:         Kind:            MEMORY
-; CHECK:         Index:           0
-; CHECK:       - Name:            main
-; CHECK:         Kind:            FUNCTION
-; CHECK:         Index:           3
-; CHECK:   - Type:            ELEM
-; CHECK:     Segments:        
-; CHECK:       - Offset:          
-; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           1
-; CHECK:         Functions:       [ 0, 2 ]
-; CHECK:   - Type:            CODE
-; CHECK:     Functions:       
-; CHECK:       - Locals:          
-; CHECK:       - Locals:          
-; CHECK:       - Locals:          
-; CHECK:   - Type:            DATA
-; CHECK:     Segments:        
-; CHECK:       - Index:           0
-; CHECK:         Offset:          
-; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           1024
-; CHECK:         Content:         '00000000'
-; CHECK:       - Index:           0
-; CHECK:         Offset:          
-; CHECK:           Opcode:          I32_CONST
-; CHECK:           Value:           1028
-; CHECK:         Content:         '00000000'
-; CHECK:   - Type:            CUSTOM
-; CHECK:     Name:            name
-; CHECK:     FunctionNames:   
-; CHECK:       - Index:           0
-; CHECK:         Name:            bar
-; CHECK:       - Index:           1
-; CHECK:         Name:            call_bar_indirect
-; CHECK:       - Index:           2
-; CHECK:         Name:            foo
-; CHECK:       - Index:           3
-; CHECK:         Name:            _start
+; CHECK:      !WASM
+; CHECK-NEXT: FileHeader:      
+; CHECK-NEXT:   Version:         0x00000001
+; CHECK-NEXT: Sections:        
+; CHECK-NEXT:   - Type:            TYPE
+; CHECK-NEXT:     Signatures:      
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         ReturnType:      I32
+; CHECK-NEXT:         ParamTypes:      
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         ReturnType:      NORESULT
+; CHECK-NEXT:         ParamTypes:      
+; CHECK-NEXT:   - Type:            FUNCTION
+; CHECK-NEXT:     FunctionTypes:   [ 0, 1, 0, 1 ]
+; CHECK-NEXT:   - Type:            TABLE
+; CHECK-NEXT:     Tables:          
+; CHECK-NEXT:       - ElemType:        ANYFUNC
+; CHECK-NEXT:         Limits:          
+; CHECK-NEXT:           Flags:           0x00000001
+; CHECK-NEXT:           Initial:         0x00000003
+; CHECK-NEXT:           Maximum:         0x00000003
+; CHECK-NEXT:   - Type:            MEMORY
+; CHECK-NEXT:     Memories:        
+; CHECK-NEXT:       - Initial:         0x00000002
+; CHECK-NEXT:   - Type:            GLOBAL
+; CHECK-NEXT:     Globals:         
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         true
+; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           66568
+; CHECK-NEXT:   - Type:            EXPORT
+; CHECK-NEXT:     Exports:         
+; CHECK-NEXT:       - Name:            memory
+; CHECK-NEXT:         Kind:            MEMORY
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:       - Name:            main
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           3
+; CHECK:        - Type:            ELEM
+; CHECK-NEXT:     Segments:        
+; CHECK-NEXT:       - Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1
+; CHECK-NEXT:         Functions:       [ 0, 2 ]
+; CHECK-NEXT:   - Type:            CODE
+; CHECK-NEXT:     Functions:       
+; CHECK:            - Locals:          
+; CHECK:            - Locals:          
+; CHECK:            - Locals:          
+; CHECK:        - Type:            DATA
+; CHECK-NEXT:     Segments:        
+; CHECK-NEXT:       - SectionOffset:    7
+; CHECK-NEXT:         MemoryIndex:      0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1024
+; CHECK-NEXT:         Content:         '01000000'
+; CHECK-NEXT:       - SectionOffset:    17
+; CHECK-NEXT:         MemoryIndex:      0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1028
+; CHECK-NEXT:         Content:         '02000000'
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            linking
+; CHECK-NEXT:     DataSize:        8
+; CHECK-NEXT:     DataAlignment:   0
+; CHECK-NEXT:     SymbolInfo:      
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            name
+; CHECK-NEXT:     FunctionNames:   
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         Name:            bar
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         Name:            call_bar_indirect
+; CHECK-NEXT:       - Index:           2
+; CHECK-NEXT:         Name:            foo
+; CHECK-NEXT:       - Index:           3
+; CHECK-NEXT:         Name:            _start
