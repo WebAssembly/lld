@@ -9,5 +9,5 @@ target triple = "wasm32-unknown-unknown-wasm"
 
 declare i32 @foo() #0
 
-; CHECK: lld: error: {{.*}}.o: undefined symbol: foo
-; CHECK: lld: error: link failed
+; CHECK: error: {{.*}}.o: undefined symbol: foo
+; CHECK: error: link failed
