@@ -179,7 +179,7 @@ const char* value_type_to_str(int32_t Type) {
 
 void debug_write(raw_ostream& OS, const char* msg, const char* fmt=NULL, ...) {
   DEBUG(
-    fprintf(stderr, "%08lx: %s", OS.tell(), msg);
+    fprintf(stderr, "%08" PRIx64 ": %s", OS.tell(), msg);
     if (fmt) {
       fprintf(stderr, " [");
       va_list ap;
@@ -1024,7 +1024,8 @@ void Writer::openFile() {
   log("writing: " + Config->OutputFile);
   ::remove(Config->OutputFile.str().c_str());
   std::error_code EC;
-  OS = make_unique<raw_fd_ostream>(StringRef(Config->OutputFile), EC, sys::fs::OpenFlags::F_None);
+  OS = llvm::make_unique<raw_fd_ostream>(
+      StringRef(Config->OutputFile), EC, sys::fs::OpenFlags::F_None);
   if (EC)
     error("failed to open " + Config->OutputFile + ": " + EC.message());
 }
