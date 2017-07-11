@@ -16,6 +16,7 @@
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LEB128.h"
+#include <cstdarg>
 
 #define DEBUG_TYPE "lld"
 
