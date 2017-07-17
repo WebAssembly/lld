@@ -111,13 +111,9 @@ LinkerScript::getOrCreateOutputSectionCommand(StringRef Name) {
 
 void LinkerScript::setDot(Expr E, const Twine &Loc, bool InSec) {
   uint64_t Val = E().getValue();
-  if (Val < Dot) {
-    if (InSec)
-      error(Loc + ": unable to move location counter backward for: " +
-            CurAddressState->OutSec->Name);
-    else
-      error(Loc + ": unable to move location counter backward");
-  }
+  if (Val < Dot && InSec)
+    error(Loc + ": unable to move location counter backward for: " +
+          CurAddressState->OutSec->Name);
   Dot = Val;
   // Update to location counter means update to section size.
   if (InSec)
@@ -231,6 +227,19 @@ bool LinkerScript::shouldKeep(InputSectionBase *S) {
         if (P.SectionPat.match(S->Name))
           return true;
   return false;
+}
+
+// If an input string is in the form of "foo.N" where N is a number,
+// return N. Otherwise, returns 65536, which is one greater than the
+// lowest priority.
+static int getPriority(StringRef S) {
+  size_t Pos = S.rfind('.');
+  if (Pos == StringRef::npos)
+    return 65536;
+  int V;
+  if (!to_integer(S.substr(Pos + 1), V, 10))
+    return 65536;
+  return V;
 }
 
 // A helper function for the SORT() command.
@@ -374,6 +383,10 @@ void LinkerScript::processCommands(OutputSectionFactory &Factory) {
   Aether = make<OutputSection>("", 0, SHF_ALLOC);
   Aether->SectionIndex = 1;
   auto State = make_unique<AddressState>(Opt);
+  // CurAddressState captures the local AddressState and makes it accessible
+  // deliberately. This is needed as there are some cases where we cannot just
+  // thread the current state through to a lambda function created by the
+  // script parser.
   CurAddressState = State.get();
   CurAddressState->OutSec = Aether;
   Dot = 0;
@@ -437,6 +450,7 @@ void LinkerScript::processCommands(OutputSectionFactory &Factory) {
       }
     }
   }
+  CurAddressState = nullptr;
 }
 
 void LinkerScript::fabricateDefaultCommands() {
@@ -843,6 +857,10 @@ void LinkerScript::assignAddresses() {
   // Assign addresses as instructed by linker script SECTIONS sub-commands.
   Dot = 0;
   auto State = make_unique<AddressState>(Opt);
+  // CurAddressState captures the local AddressState and makes it accessible
+  // deliberately. This is needed as there are some cases where we cannot just
+  // thread the current state through to a lambda function created by the
+  // script parser.
   CurAddressState = State.get();
   ErrorOnMissingSection = true;
   switchTo(Aether);
@@ -861,6 +879,7 @@ void LinkerScript::assignAddresses() {
     auto *Cmd = cast<OutputSectionCommand>(Base);
     assignOffsets(Cmd);
   }
+  CurAddressState = nullptr;
 }
 
 // Creates program headers as instructed by PHDRS linker script command.
