@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "Error.h"
 #include "InputFiles.h"
+#include "SymbolTable.h"
 #include "Symbols.h"
 #include "lld/Core/TargetOptionsCommandFlags.h"
 #include "llvm/ADT/STLExtras.h"
@@ -73,6 +74,10 @@ static std::unique_ptr<lto::LTO> createLTO() {
   Conf.Options = InitTargetOptionsFromCodeGenFlags();
   Conf.Options.RelaxELFRelocations = true;
 
+  // Always emit a section per function/datum with LTO.
+  Conf.Options.FunctionSections = true;
+  Conf.Options.DataSections = true;
+
   if (Config->Relocatable)
     Conf.RelocModel = None;
   else if (Config->Pic)
@@ -103,7 +108,14 @@ static std::unique_ptr<lto::LTO> createLTO() {
                                      Config->LTOPartitions);
 }
 
-BitcodeCompiler::BitcodeCompiler() : LTOObj(createLTO()) {}
+BitcodeCompiler::BitcodeCompiler() : LTOObj(createLTO()) {
+  for (Symbol *Sym : Symtab->getSymbols()) {
+    StringRef Name = Sym->body()->getName();
+    for (StringRef Prefix : {"__start_", "__stop_"})
+      if (Name.startswith(Prefix))
+        UsedStartStop.insert(Name.substr(Prefix.size()));
+  }
+}
 
 BitcodeCompiler::~BitcodeCompiler() = default;
 
@@ -115,15 +127,15 @@ static void undefine(Symbol *S) {
 void BitcodeCompiler::add(BitcodeFile &F) {
   lto::InputFile &Obj = *F.Obj;
   unsigned SymNum = 0;
-  std::vector<Symbol *> Syms = F.getSymbols();
+  std::vector<SymbolBody *> Syms = F.getSymbols();
   std::vector<lto::SymbolResolution> Resols(Syms.size());
 
   // Provide a resolution to the LTO API for each symbol.
   for (const lto::InputFile::Symbol &ObjSym : Obj.symbols()) {
-    Symbol *Sym = Syms[SymNum];
+    SymbolBody *B = Syms[SymNum];
+    Symbol *Sym = B->symbol();
     lto::SymbolResolution &R = Resols[SymNum];
     ++SymNum;
-    SymbolBody *B = Sym->body();
 
     // Ideally we shouldn't check for SF_Undefined but currently IRObjectFile
     // reports two symbols for module ASM defined. Without this check, lld
@@ -132,8 +144,9 @@ void BitcodeCompiler::add(BitcodeFile &F) {
     // be removed.
     R.Prevailing = !ObjSym.isUndefined() && B->File == &F;
 
-    R.VisibleToRegularObj =
-        Sym->IsUsedInRegularObj || (R.Prevailing && Sym->includeInDynsym());
+    R.VisibleToRegularObj = Sym->IsUsedInRegularObj ||
+                            (R.Prevailing && Sym->includeInDynsym()) ||
+                            UsedStartStop.count(ObjSym.getSectionName());
     if (R.Prevailing)
       undefine(Sym);
     R.LinkerRedefined = Config->RenamedSymbols.count(Sym);

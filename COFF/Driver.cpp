@@ -127,7 +127,7 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> MB) {
     error(MBRef.getBufferIdentifier() + ": is not a native COFF file. "
           "Recompile without /GL");
   else
-    Symtab.addFile(make<ObjectFile>(MBRef));
+    Symtab.addFile(make<ObjFile>(MBRef));
 }
 
 void LinkerDriver::enqueuePath(StringRef Path) {
@@ -153,7 +153,7 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
 
   InputFile *Obj;
   if (Magic == file_magic::coff_object) {
-    Obj = make<ObjectFile>(MB);
+    Obj = make<ObjFile>(MB);
   } else if (Magic == file_magic::bitcode) {
     Obj = make<BitcodeFile>(MB);
   } else {
@@ -610,16 +610,16 @@ void LinkerDriver::invokeMSVC(opt::InputArgList &Args) {
   // Write out archive members that we used in symbol resolution and pass these
   // to MSVC before any archives, so that MSVC uses the same objects to satisfy
   // references.
-  for (const auto *O : Symtab.ObjectFiles) {
-    if (O->ParentName.empty())
+  for (ObjFile *Obj : ObjFile::Instances) {
+    if (Obj->ParentName.empty())
       continue;
     SmallString<128> S;
     int Fd;
     if (auto EC = sys::fs::createTemporaryFile(
-            "lld-" + sys::path::filename(O->ParentName), ".obj", Fd, S))
+            "lld-" + sys::path::filename(Obj->ParentName), ".obj", Fd, S))
       fatal(EC, "cannot create a temporary file");
     raw_fd_ostream OS(Fd, /*shouldClose*/ true);
-    OS << O->MB.getBuffer();
+    OS << Obj->MB.getBuffer();
     Temps.push_back(S.str());
     Rsp += quote(S) + "\n";
   }
@@ -651,8 +651,8 @@ void LinkerDriver::invokeMSVC(opt::InputArgList &Args) {
     }
   }
 
-  std::vector<StringRef> ObjectFiles = Symtab.compileBitcodeFiles();
-  runMSVCLinker(Rsp, ObjectFiles);
+  std::vector<StringRef> ObjFiles = Symtab.compileBitcodeFiles();
+  runMSVCLinker(Rsp, ObjFiles);
 
   for (StringRef Path : Temps)
     sys::fs::remove(Path);
@@ -899,17 +899,24 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   for (auto *Arg : Args.filtered(OPT_section))
     parseSection(Arg->getValue());
 
-  // Handle /manifest
-  if (auto *Arg = Args.getLastArg(OPT_manifest_colon))
-    parseManifest(Arg->getValue());
+  // Handle /manifestdependency. This enables /manifest unless /manifest:no is
+  // also passed.
+  if (auto *Arg = Args.getLastArg(OPT_manifestdependency)) {
+    Config->ManifestDependency = Arg->getValue();
+    Config->Manifest = Configuration::SideBySide;
+  }
+
+  // Handle /manifest and /manifest:
+  if (auto *Arg = Args.getLastArg(OPT_manifest, OPT_manifest_colon)) {
+    if (Arg->getOption().getID() == OPT_manifest)
+      Config->Manifest = Configuration::SideBySide;
+    else
+      parseManifest(Arg->getValue());
+  }
 
   // Handle /manifestuac
   if (auto *Arg = Args.getLastArg(OPT_manifestuac))
     parseManifestUAC(Arg->getValue());
-
-  // Handle /manifestdependency
-  if (auto *Arg = Args.getLastArg(OPT_manifestdependency))
-    Config->ManifestDependency = Arg->getValue();
 
   // Handle /manifestfile
   if (auto *Arg = Args.getLastArg(OPT_manifestfile))
@@ -918,6 +925,11 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /manifestinput
   for (auto *Arg : Args.filtered(OPT_manifestinput))
     Config->ManifestInput.push_back(Arg->getValue());
+
+  if (!Config->ManifestInput.empty() &&
+      Config->Manifest != Configuration::Embed) {
+    fatal("/MANIFESTINPUT: requires /MANIFEST:EMBED");
+  }
 
   // Handle miscellaneous boolean flags.
   if (Args.hasArg(OPT_allowisolation_no))
@@ -1131,7 +1143,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   // Handle /safeseh.
   if (Args.hasArg(OPT_safeseh)) {
-    for (ObjectFile *File : Symtab.ObjectFiles)
+    for (ObjFile *File : ObjFile::Instances)
       if (!File->SEHCompat)
         error("/safeseh: " + File->getName() + " is not compatible with SEH");
     if (ErrorCount)
