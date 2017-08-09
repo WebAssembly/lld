@@ -80,14 +80,13 @@ bool ObjectFile::isResolvedGlobalImport(uint32_t index) const {
 }
 
 int32_t ObjectFile::getGlobalAddress(uint32_t index) const {
-  if (isImportedGlobal(index)) {
+  if (isImportedGlobal(index))
     return 0;
-  } else {
-    index -= GlobalImports.size();
-    const WasmGlobal &Global = WasmObj->globals()[index];
-    assert(Global.Type == WASM_TYPE_I32);
-    return Global.InitExpr.Value.Int32 + DataOffset;
-  }
+
+  index -= GlobalImports.size();
+  const WasmGlobal &Global = WasmObj->globals()[index];
+  assert(Global.Type == WASM_TYPE_I32);
+  return Global.InitExpr.Value.Int32 + DataOffset;
 }
 
 uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
@@ -97,10 +96,10 @@ uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
     Symbol* Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
-  } else {
-    DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " " << (original + FunctionIndexOffset) << "\n");
-    return original + FunctionIndexOffset;
   }
+
+  DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " " << (original + FunctionIndexOffset) << "\n");
+  return original + FunctionIndexOffset;
 }
 
 uint32_t ObjectFile::relocateTypeIndex(uint32_t original) const {
@@ -118,9 +117,9 @@ uint32_t ObjectFile::relocateGlobalIndex(uint32_t original) const {
     Symbol* Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
-  } else {
-    return original + GlobalIndexOffset;
   }
+
+  return original + GlobalIndexOffset;
 }
 
 void ObjectFile::parse() {

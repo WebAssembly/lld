@@ -105,8 +105,8 @@ private:
                         uint32_t SectionOffset,
                         uint32_t OutputOffset);
 
-  SectionBookkeeping writeSectionHeader(uint32_t Type, raw_fd_ostream &OS);
-  void endSection(SectionBookkeeping& Section, raw_fd_ostream &OS) const;
+  SectionBookkeeping writeSectionHeader(raw_fd_ostream &OS, uint32_t Type);
+  void endSection(raw_fd_ostream &OS, SectionBookkeeping& Section) const;
 
   uint32_t DataSize = 0;
   uint32_t DataAlignment = 1;
@@ -131,16 +131,16 @@ private:
 } // anonymous namespace
 
 // Return the padding size to write a 32-bit value into a 5-byte ULEB128.
-static unsigned PaddingFor5ByteULEB128(uint32_t X) {
+static unsigned paddingFor5ByteULEB128(uint32_t X) {
   return X == 0 ? 4 : (4u - (31u - countLeadingZeros(X)) / 7u);
 }
 
 // Return the padding size to write a 32-bit value into a 5-byte SLEB128.
-static unsigned PaddingFor5ByteSLEB128(int32_t X) {
+static unsigned paddingFor5ByteSLEB128(int32_t X) {
   return 5 - getSLEB128Size(X);
 }
 
-static void debug_print(const char* fmt, ...) {
+static void debugPrint(const char* fmt, ...) {
   if (Config->Verbose) {
     fprintf(stderr, "lld: ");
     va_list ap;
@@ -151,22 +151,31 @@ static void debug_print(const char* fmt, ...) {
 }
 
 static const char* section_type_to_str(uint32_t SectionType) {
-#define ECase(X)                 \
-  case WASM_SEC_##X:             \
-    return #X;
   switch (SectionType) {
-    ECase(CUSTOM);
-    ECase(TYPE);
-    ECase(IMPORT);
-    ECase(FUNCTION);
-    ECase(TABLE);
-    ECase(MEMORY);
-    ECase(GLOBAL);
-    ECase(EXPORT);
-    ECase(START);
-    ECase(ELEM);
-    ECase(CODE);
-    ECase(DATA);
+  case WASM_SEC_CUSTOM:
+    return "CUSTOM";
+  case WASM_SEC_TYPE:
+    return "TYPE";
+  case WASM_SEC_IMPORT:
+    return "IMPORT";
+  case WASM_SEC_FUNCTION:
+    return "FUNCTION";
+  case WASM_SEC_TABLE:
+    return "TABLE";
+  case WASM_SEC_MEMORY:
+    return "MEMORY";
+  case WASM_SEC_GLOBAL:
+    return "GLOBAL";
+  case WASM_SEC_EXPORT:
+    return "EXPORT";
+  case WASM_SEC_START:
+    return "START";
+  case WASM_SEC_ELEM:
+    return "ELEM";
+  case WASM_SEC_CODE:
+    return "CODE";
+  case WASM_SEC_DATA:
+    return "DATA";
   default:
     fatal("invalid section type");
     return nullptr;
@@ -189,7 +198,7 @@ static const char* value_type_to_str(int32_t Type) {
   }
 }
 
-static void debug_write(raw_ostream &OS, const char *msg,
+static void debugWrite(raw_ostream &OS, const char *msg,
                         const char *fmt = NULL, ...) {
   DEBUG(
     fprintf(stderr, "%08" PRIx64 ": %s", OS.tell(), msg);
@@ -205,113 +214,113 @@ static void debug_write(raw_ostream &OS, const char *msg,
   );
 }
 
-static void write_u8(uint8_t byte, raw_ostream& OS, const char* msg) {
+static void write_u8(raw_ostream& OS, uint8_t byte, const char* msg) {
   OS << byte;
 }
 
-static void write_u32(uint32_t Number, raw_ostream& OS, const char* msg) {
-  debug_write(OS, msg, "%x", Number);
+static void write_u32(raw_ostream& OS, uint32_t Number, const char* msg) {
+  debugWrite(OS, msg, "%x", Number);
   support::endian::Writer<support::little>(OS).write(Number);
 }
 
-static void write_uleb128(uint32_t Number, raw_ostream& OS, const char* msg) {
+static void write_uleb128(raw_ostream& OS, uint32_t Number, const char* msg) {
   if (msg)
-    debug_write(OS, msg, "%x", Number);
+    debugWrite(OS, msg, "%x", Number);
   encodeULEB128(Number, OS);
 }
 
-static void write_uleb128_padded(uint32_t Number, raw_ostream &OS,
+static void write_uleb128_padded(raw_ostream& OS, uint32_t Number,
                                  const char *msg) {
   if (msg)
-    debug_write(OS, msg);
-  unsigned Padding = PaddingFor5ByteULEB128(Number);
+    debugWrite(OS, msg);
+  unsigned Padding = paddingFor5ByteULEB128(Number);
   encodeULEB128(Number, OS, Padding);
 }
 
-static void write_sleb128(int32_t Number, raw_ostream& OS, const char* msg) {
+static void write_sleb128(raw_ostream& OS, int32_t Number, const char* msg) {
   if (msg)
-    debug_write(OS, msg, "%x", Number);
+    debugWrite(OS, msg, "%x", Number);
   encodeSLEB128(Number, OS);
 }
 
-static void write_bytes(const char *bytes, uint32_t count, raw_ostream &OS,
+static void write_bytes(raw_ostream &OS, const char *bytes, uint32_t count,
                         const char *msg) {
   if (msg)
-    debug_write(OS, msg);
+    debugWrite(OS, msg);
   OS.write(bytes, count);
 }
 
-static void write_str(const StringRef String, raw_ostream& OS, const char* msg) {
-  debug_write(OS, msg, "str[%d]: %.*s", String.size(), String.size(), String.data());
-  write_uleb128(String.size(), OS, nullptr);
-  write_bytes(String.data(), String.size(), OS, nullptr);
+static void write_str(raw_ostream& OS, const StringRef String, const char* msg) {
+  debugWrite(OS, msg, "str[%d]: %.*s", String.size(), String.size(), String.data());
+  write_uleb128(OS, String.size(), nullptr);
+  write_bytes(OS, String.data(), String.size(), nullptr);
 }
 
-static void write_value_type(int32_t Type, raw_ostream& OS, const char* msg) {
-  debug_write(OS, msg, "type: %s", value_type_to_str(Type));
-  write_sleb128(Type, OS, nullptr);
+static void write_value_type(raw_ostream& OS, int32_t Type, const char* msg) {
+  debugWrite(OS, msg, "type: %s", value_type_to_str(Type));
+  write_sleb128(OS, Type, nullptr);
 }
 
-static void write_sig(const WasmSignature &Sig, raw_ostream& OS) {
-  write_sleb128(WASM_TYPE_FUNC, OS, "signature type");
-  write_uleb128(Sig.ParamTypes.size(), OS, "param count");
+static void write_sig(raw_ostream& OS, const WasmSignature &Sig) {
+  write_sleb128(OS, WASM_TYPE_FUNC, "signature type");
+  write_uleb128(OS, Sig.ParamTypes.size(), "param count");
   for (int32_t ParamType: Sig.ParamTypes) {
-    write_value_type(ParamType, OS, "param type");
+    write_value_type(OS, ParamType, "param type");
   }
   if (Sig.ReturnType == WASM_TYPE_NORESULT) {
-    write_uleb128(0, OS, "result count");
+    write_uleb128(OS, 0, "result count");
   } else {
-    write_uleb128(1, OS, "result count");
-    write_value_type(Sig.ReturnType, OS, "result type");
+    write_uleb128(OS, 1, "result count");
+    write_value_type(OS, Sig.ReturnType, "result type");
   }
 }
 
-static void write_init_expr(const WasmInitExpr& InitExpr, raw_fd_ostream& OS) {
-  write_u8(InitExpr.Opcode, OS, "opcode");
+static void write_init_expr(raw_fd_ostream& OS, const WasmInitExpr& InitExpr) {
+  write_u8(OS, InitExpr.Opcode, "opcode");
   switch (InitExpr.Opcode) {
   case WASM_OPCODE_I32_CONST:
-    write_sleb128(InitExpr.Value.Int32, OS, "literal (i32)");
+    write_sleb128(OS, InitExpr.Value.Int32, "literal (i32)");
     break;
   case WASM_OPCODE_I64_CONST:
-    write_sleb128(InitExpr.Value.Int64, OS, "literal (i64)");
+    write_sleb128(OS, InitExpr.Value.Int64, "literal (i64)");
     break;
   case WASM_OPCODE_GET_GLOBAL:
-    write_uleb128(InitExpr.Value.Global, OS, "literal (global index)");
+    write_uleb128(OS, InitExpr.Value.Global, "literal (global index)");
     break;
   default:
     fatal("unknown opcode in init expr: " + Twine(InitExpr.Opcode));
     break;
   }
-  write_u8(WASM_OPCODE_END, OS, "opcode:end");
+  write_u8(OS, WASM_OPCODE_END, "opcode:end");
 }
 
-static void write_limits(const WasmLimits& Limits, raw_fd_ostream& OS) {
-  write_uleb128(Limits.Flags, OS, "limits flags");
-  write_uleb128(Limits.Initial, OS, "limits initial");
+static void write_limits(raw_fd_ostream& OS, const WasmLimits& Limits) {
+  write_uleb128(OS, Limits.Flags, "limits flags");
+  write_uleb128(OS, Limits.Initial, "limits initial");
   if (Limits.Flags & WASM_LIMITS_FLAG_HAS_MAX)
-    write_uleb128(Limits.Maximum, OS, "limits max");
+    write_uleb128(OS, Limits.Maximum, "limits max");
 }
 
-static void write_global(const WasmGlobal& Global, raw_fd_ostream& OS) {
-  write_value_type(Global.Type, OS, "global type");
-  write_uleb128(Global.Mutable, OS, "global mutable");
-  write_init_expr(Global.InitExpr, OS);
+static void write_global(raw_fd_ostream& OS, const WasmGlobal& Global) {
+  write_value_type(OS, Global.Type, "global type");
+  write_uleb128(OS, Global.Mutable, "global mutable");
+  write_init_expr(OS, Global.InitExpr);
 }
 
-static void write_import(const WasmImport& Import, raw_fd_ostream& OS) {
-  write_str(Import.Module, OS, "import module name");
-  write_str(Import.Field, OS, "import field name");
-  write_u8(Import.Kind, OS, "import kind");
+static void write_import(raw_fd_ostream& OS, const WasmImport& Import) {
+  write_str(OS, Import.Module, "import module name");
+  write_str(OS, Import.Field, "import field name");
+  write_u8(OS, Import.Kind, "import kind");
   switch (Import.Kind) {
     case WASM_EXTERNAL_FUNCTION:
-      write_uleb128(Import.SigIndex, OS, "import sig index");
+      write_uleb128(OS, Import.SigIndex, "import sig index");
       break;
     case WASM_EXTERNAL_GLOBAL:
-      write_value_type(Import.Global.Type, OS, "import global type");
-      write_uleb128(Import.Global.Mutable, OS, "import global mutable");
+      write_value_type(OS, Import.Global.Type, "import global type");
+      write_uleb128(OS, Import.Global.Mutable, "import global mutable");
       break;
     case WASM_EXTERNAL_MEMORY:
-      write_limits(Import.Memory, OS);
+      write_limits(OS, Import.Memory);
       break;
     default:
       fatal("unsupported import type: " + Twine(Import.Kind));
@@ -319,18 +328,18 @@ static void write_import(const WasmImport& Import, raw_fd_ostream& OS) {
   }
 }
 
-static void write_export(const WasmExport& Export, raw_fd_ostream& OS) {
-  write_str(Export.Name, OS, "export name");
-  write_u8(Export.Kind, OS, "export kind");
+static void write_export(raw_fd_ostream& OS, const WasmExport& Export) {
+  write_str(OS, Export.Name, "export name");
+  write_u8(OS, Export.Kind, "export kind");
   switch (Export.Kind) {
     case WASM_EXTERNAL_FUNCTION:
-      write_uleb128(Export.Index, OS, "function index");
+      write_uleb128(OS, Export.Index, "function index");
       break;
     case WASM_EXTERNAL_GLOBAL:
-      write_uleb128(Export.Index, OS, "global index");
+      write_uleb128(OS, Export.Index, "global index");
       break;
     case WASM_EXTERNAL_MEMORY:
-      write_uleb128(Export.Index, OS, "memory index");
+      write_uleb128(OS, Export.Index, "memory index");
       break;
     default:
       fatal("unsupported export type: " + Twine(Export.Kind));
@@ -339,38 +348,37 @@ static void write_export(const WasmExport& Export, raw_fd_ostream& OS) {
 }
 
 static void write_reloc(raw_fd_ostream& OS, const WasmRelocation &Reloc) {
-  write_uleb128(Reloc.Type, OS, "reloc type");
-  write_uleb128(Reloc.Offset, OS, "reloc offset");
-  write_uleb128(Reloc.Index, OS, "reloc index");
+  write_uleb128(OS, Reloc.Type, "reloc type");
+  write_uleb128(OS, Reloc.Offset, "reloc offset");
+  write_uleb128(OS, Reloc.Index, "reloc index");
 
   switch (Reloc.Type) {
   case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
   case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
   case R_WEBASSEMBLY_GLOBAL_ADDR_I32:
-    write_uleb128(Reloc.Addend, OS, "reloc addend");
+    write_uleb128(OS, Reloc.Addend, "reloc addend");
     break;
   default:
     break;
   }
 }
 
-SectionBookkeeping Writer::writeSectionHeader(uint32_t Type,
-                                              raw_fd_ostream &OS) {
+SectionBookkeeping Writer::writeSectionHeader(raw_fd_ostream &OS,
+                                              uint32_t Type) {
   SectionBookkeeping Section;
-  debug_write(OS, "section type", "%s", section_type_to_str(Type));
-  write_uleb128(Type, OS, nullptr);
+  debugWrite(OS, "section type", "%s", section_type_to_str(Type));
+  write_uleb128(OS, Type, nullptr);
   Section.SizeOffset = OS.tell();
-  write_uleb128_padded(0, OS, "section size");
+  write_uleb128_padded(OS, 0, "section size");
   Section.ContentsOffset = OS.tell();
   return Section;
 }
 
-void Writer::endSection(SectionBookkeeping &Section,
-                        raw_fd_ostream &OS) const {
+void Writer::endSection(raw_fd_ostream &OS, SectionBookkeeping &Section) const {
   uint64_t End = OS.tell();
   uint64_t Size = End - Section.ContentsOffset;
   OS.seek(Section.SizeOffset);
-  write_uleb128_padded(Size, OS, "fixup section size");
+  write_uleb128_padded(OS, Size, "fixup section size");
   OS.seek(End);
 }
 
@@ -382,8 +390,8 @@ void Writer::writeImportSection(raw_fd_ostream& OS) {
   if (TotalImports == 0)
     return;
 
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_IMPORT, OS);
-  write_uleb128(TotalImports, OS, "import count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_IMPORT);
+  write_uleb128(OS, TotalImports, "import count");
 
   for (Symbol *Sym: FunctionImports) {
     WasmImport Import;
@@ -393,7 +401,7 @@ void Writer::writeImportSection(raw_fd_ostream& OS) {
     assert(isa<ObjectFile>(Sym->getFile()));
     ObjectFile* Obj = dyn_cast<ObjectFile>(Sym->getFile());
     Import.SigIndex = Obj->relocateTypeIndex(Sym->getFunctionTypeIndex());
-    write_import(Import, OS);
+    write_import(OS, Import);
   }
 
   if (Config->ImportMemory) {
@@ -403,7 +411,7 @@ void Writer::writeImportSection(raw_fd_ostream& OS) {
     Import.Kind = WASM_EXTERNAL_MEMORY;
     Import.Memory.Flags = 0;
     Import.Memory.Initial = TotalMemoryPages;
-    write_import(Import, OS);
+    write_import(OS, Import);
   }
 
   for (Symbol *Sym: GlobalImports) {
@@ -416,54 +424,54 @@ void Writer::writeImportSection(raw_fd_ostream& OS) {
     // TODO(sbc): Set type of this import
     //ObjectFile* Obj = dyn_cast<ObjectFile>(Sym->getFile());
     Import.Global.Type = WASM_TYPE_I32; //Sym->getGlobalType();
-    write_import(Import, OS);
+    write_import(OS, Import);
   }
 
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeTypeSection(raw_fd_ostream& OS) {
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_TYPE, OS);
-  write_uleb128(Types.size(), OS, "type count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_TYPE);
+  write_uleb128(OS, Types.size(), "type count");
   for (const WasmSignature *Sig : Types) {
-    write_sig(*Sig, OS);
+    write_sig(OS, *Sig);
   }
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeFunctionSection(raw_fd_ostream& OS) {
   if (!TotalFunctions)
     return;
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_FUNCTION, OS);
-  write_uleb128(TotalFunctions, OS, "function count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_FUNCTION);
+  write_uleb128(OS, TotalFunctions, "function count");
   for (ObjectFile *File: Symtab->ObjectFiles) {
     for (uint32_t Sig: File->getWasmObj()->functionTypes()) {
-      write_uleb128(File->relocateTypeIndex(Sig), OS, "sig index");
+      write_uleb128(OS, File->relocateTypeIndex(Sig), "sig index");
     }
   }
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeMemorySection(raw_fd_ostream& OS) {
   if (Config->ImportMemory)
     return;
 
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_MEMORY, OS);
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_MEMORY);
 
-  write_uleb128(1, OS, "memory count");
-  write_uleb128(0, OS, "memory limits flags");
-  write_uleb128(TotalMemoryPages, OS, "initial pages");
+  write_uleb128(OS, 1, "memory count");
+  write_uleb128(OS, 0, "memory limits flags");
+  write_uleb128(OS, TotalMemoryPages, "initial pages");
 
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeGlobalSection(raw_fd_ostream& OS) {
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_GLOBAL, OS);
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_GLOBAL);
 
-  write_uleb128(TotalGlobals, OS, "global count");
+  write_uleb128(OS, TotalGlobals, "global count");
   for (auto& Pair: Config->SyntheticGlobals) {
     WasmGlobal& Global = Pair.second;
-    write_global(Global, OS);
+    write_global(OS, Global);
   }
 
   if (Config->Relocatable) {
@@ -477,24 +485,24 @@ void Writer::writeGlobalSection(raw_fd_ostream& OS) {
           fatal("unsupported global init opcode: " +
                 Twine(Global.InitExpr.Opcode));
         RelocatedGlobal.InitExpr.Value.Int32 = File->getGlobalAddress(GlobalIndex);
-        write_global(RelocatedGlobal, OS);
+        write_global(OS, RelocatedGlobal);
         GlobalIndex++;
       }
     }
   }
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeTableSection(raw_fd_ostream& OS) {
   if (TotalTableLength == InitialTableOffset)
     return;
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_TABLE, OS);
-  write_uleb128(1, OS, "table count");
-  write_sleb128(WASM_TYPE_ANYFUNC, OS, "table type");
-  write_uleb128(WASM_LIMITS_FLAG_HAS_MAX, OS, "table flags");
-  write_uleb128(TotalTableLength, OS, "table initial size");
-  write_uleb128(TotalTableLength, OS, "table max size");
-  endSection(Section, OS);
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_TABLE);
+  write_uleb128(OS, 1, "table count");
+  write_sleb128(OS, WASM_TYPE_ANYFUNC, "table type");
+  write_uleb128(OS, WASM_LIMITS_FLAG_HAS_MAX, "table flags");
+  write_uleb128(OS, TotalTableLength, "table initial size");
+  write_uleb128(OS, TotalTableLength, "table max size");
+  endSection(OS, Section);
 }
 
 void Writer::writeExportSection(raw_fd_ostream& OS) {
@@ -528,15 +536,15 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
   if (!NumExports)
     return;
 
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_EXPORT, OS);
-  write_uleb128(NumExports, OS, "export count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_EXPORT);
+  write_uleb128(OS, NumExports, "export count");
 
   if (ExportMemory) {
     WasmExport MemoryExport;
     MemoryExport.Name = "memory";
     MemoryExport.Kind = WASM_EXTERNAL_MEMORY;
     MemoryExport.Index = 0;
-    write_export(MemoryExport, OS);
+    write_export(OS, MemoryExport);
   }
 
   if (ExportMain) {
@@ -554,7 +562,7 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
       MainExport.Name = Config->ExportEntryAs;
       MainExport.Kind = WASM_EXTERNAL_FUNCTION;
       MainExport.Index = Sym->getOutputIndex();
-      write_export(MainExport, OS);
+      write_export(OS, MainExport);
     }
   }
 
@@ -572,7 +580,7 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
           Export.Kind = WASM_EXTERNAL_FUNCTION;
         else
           Export.Kind = WASM_EXTERNAL_GLOBAL;
-        write_export(Export, OS);
+        write_export(OS, Export);
       }
     }
 
@@ -580,7 +588,7 @@ void Writer::writeExportSection(raw_fd_ostream& OS) {
     // of the symbol table?
   }
 
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeStartSection(raw_fd_ostream& OS) {}
@@ -588,24 +596,24 @@ void Writer::writeStartSection(raw_fd_ostream& OS) {}
 void Writer::writeElemSection(raw_fd_ostream& OS) {
   if (!TotalElements)
     return;
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_ELEM, OS);
-  write_uleb128(1, OS, "segment count");
-  write_uleb128(0, OS, "table index");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_ELEM);
+  write_uleb128(OS, 1, "segment count");
+  write_uleb128(OS, 0, "table index");
   WasmInitExpr InitExpr;
   InitExpr.Opcode = WASM_OPCODE_I32_CONST;
   InitExpr.Value.Int32 = InitialTableOffset;
-  write_init_expr(InitExpr, OS);
-  write_uleb128(TotalElements, OS, "elem count");
+  write_init_expr(OS, InitExpr);
+  write_uleb128(OS, TotalElements, "elem count");
 
   for (ObjectFile *File: Symtab->ObjectFiles) {
     for (const WasmElemSegment &Segment: File->getWasmObj()->elements()) {
       for (uint64_t FunctionIndex: Segment.Functions) {
-        write_uleb128(File->relocateFunctionIndex(FunctionIndex), OS,
+        write_uleb128(OS, File->relocateFunctionIndex(FunctionIndex),
                       "function index");
       }
     }
   }
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::applyRelocations(const ObjectFile &File,
@@ -672,13 +680,13 @@ void Writer::applyRelocations(const ObjectFile &File,
     // Encode the new value
     switch (Encoding) {
     case RelocEncoding::Uleb128: {
-      unsigned Padding = PaddingFor5ByteULEB128(NewValue);
+      unsigned Padding = paddingFor5ByteULEB128(NewValue);
       assert(NewValue >= 0 && NewValue <= UINT32_MAX);
       encodeULEB128(NewValue, Location, Padding);
       break;
     }
     case RelocEncoding::Sleb128: {
-      unsigned Padding = PaddingFor5ByteSLEB128(NewValue);
+      unsigned Padding = paddingFor5ByteSLEB128(NewValue);
       assert(NewValue >= INT32_MIN && NewValue <= INT32_MAX);
       encodeSLEB128(NewValue, Location, Padding);
       break;
@@ -700,8 +708,8 @@ void Writer::writeCodeSection(raw_fd_ostream& OS) {
     return;
 
   log("writeCodeSection");
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CODE, OS);
-  write_uleb128(TotalFunctions, OS, "function count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_CODE);
+  write_uleb128(OS, TotalFunctions, "function count");
   uint32_t ContentsStart = OS.tell();
   uint32_t TotalCodeRelocations = 0;
 
@@ -721,11 +729,11 @@ void Writer::writeCodeSection(raw_fd_ostream& OS) {
     decodeULEB128(Content.data(), &PayloadOffset);
 
     const char* Payload = reinterpret_cast<const char *>(Content.data());
-    write_bytes(Payload + PayloadOffset,
-                Content.size() - PayloadOffset, OS, "section data");
+    write_bytes(OS, Payload + PayloadOffset, Content.size() - PayloadOffset,
+                "section data");
   }
 
-  endSection(Section, OS);
+  endSection(OS, Section);
   assert(CodeRelocations.size() == TotalCodeRelocations);
 }
 
@@ -734,8 +742,8 @@ void Writer::writeDataSection(raw_fd_ostream& OS) {
     return;
 
   log("writeDataSection");
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_DATA, OS);
-  write_uleb128(TotalDataSegments, OS, "data segment count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_DATA);
+  write_uleb128(OS, TotalDataSegments, "data segment count");
   uint32_t ContentsStart = OS.tell();
   uint32_t TotalDataRelocations = 0;
 
@@ -746,12 +754,12 @@ void Writer::writeDataSection(raw_fd_ostream& OS) {
     assert(File->getWasmObj()->dataSegments().size() <= 1);
     uint32_t DataSectionOffset = OS.tell() - ContentsStart;
     for (const object::WasmSegment &Segment: File->getWasmObj()->dataSegments()) {
-      write_uleb128(Segment.Data.MemoryIndex, OS, "memory index");
-      write_uleb128(WASM_OPCODE_I32_CONST, OS, "opcode:i32const");
+      write_uleb128(OS, Segment.Data.MemoryIndex, "memory index");
+      write_uleb128(OS, WASM_OPCODE_I32_CONST, "opcode:i32const");
       uint32_t NewOffset = Segment.Data.Offset.Value.Int32 + File->DataOffset;
-      write_sleb128(NewOffset, OS, "memory offset");
-      write_uleb128(WASM_OPCODE_END, OS, "opcode:end");
-      write_uleb128(Segment.Data.Content.size(), OS, "segment size");
+      write_sleb128(OS, NewOffset, "memory offset");
+      write_uleb128(OS, WASM_OPCODE_END, "opcode:end");
+      write_uleb128(OS, Segment.Data.Content.size(), "segment size");
 
       OwningArrayRef<uint8_t> Content(Segment.Data.Content);
       applyRelocations(*File, Content, File->DataSection->Relocations,
@@ -759,51 +767,51 @@ void Writer::writeDataSection(raw_fd_ostream& OS) {
                        DataSectionOffset);
 
       const char* Payload = reinterpret_cast<const char *>(Content.data());
-      write_bytes(Payload, Content.size(), OS, "segment data");
+      write_bytes(OS, Payload, Content.size(), "segment data");
     }
   }
 
-  endSection(Section, OS);
+  endSection(OS, Section);
   assert(DataRelocations.size() == TotalDataRelocations);
 }
 
 void Writer::writeRelocSections(raw_fd_ostream& OS) {
   if (CodeRelocations.size()) {
-    SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CUSTOM, OS);
-    write_str("reloc.CODE", OS, "reloc section string name");
-    write_uleb128(WASM_SEC_CODE, OS, "reloc section");
-    write_uleb128(CodeRelocations.size(), OS, "reloc section");
+    SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_CUSTOM);
+    write_str(OS, "reloc.CODE", "reloc section string name");
+    write_uleb128(OS, WASM_SEC_CODE, "reloc section");
+    write_uleb128(OS, CodeRelocations.size(), "reloc section");
     for (const WasmRelocation &Reloc: CodeRelocations)
       write_reloc(OS, Reloc);
-    endSection(Section, OS);
+    endSection(OS, Section);
   }
 
   if (DataRelocations.size()) {
-    SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CUSTOM, OS);
-    write_str("reloc.DATA", OS, "reloc section string name");
-    write_uleb128(WASM_SEC_DATA, OS, "reloc section");
-    write_uleb128(DataRelocations.size(), OS, "reloc section");
+    SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_CUSTOM);
+    write_str(OS, "reloc.DATA", "reloc section string name");
+    write_uleb128(OS, WASM_SEC_DATA, "reloc section");
+    write_uleb128(OS, DataRelocations.size(), "reloc section");
     for (const WasmRelocation &Reloc: DataRelocations)
       write_reloc(OS, Reloc);
-    endSection(Section, OS);
+    endSection(OS, Section);
   }
 }
 
 void Writer::writeLinkingSection(raw_fd_ostream& OS) {
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CUSTOM, OS);
-  write_str("linking", OS, "custom section name");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_CUSTOM);
+  write_str(OS, "linking", "custom section name");
 
-  SectionBookkeeping SubSection = writeSectionHeader(WASM_DATA_SIZE, OS);
-  write_uleb128(DataSize, OS, "data size");
-  endSection(SubSection, OS);
+  SectionBookkeeping SubSection = writeSectionHeader(OS, WASM_DATA_SIZE);
+  write_uleb128(OS, DataSize, "data size");
+  endSection(OS, SubSection);
 
   if (Config->Relocatable) {
-    SubSection = writeSectionHeader(WASM_DATA_ALIGNMENT, OS);
-    write_uleb128(DataAlignment, OS, "data alignment");
-    endSection(SubSection, OS);
+    SubSection = writeSectionHeader(OS, WASM_DATA_ALIGNMENT);
+    write_uleb128(OS, DataAlignment, "data alignment");
+    endSection(OS, SubSection);
   }
 
-  endSection(Section, OS);
+  endSection(OS, Section);
 }
 
 void Writer::writeNameSection(raw_fd_ostream& OS) {
@@ -827,10 +835,10 @@ void Writer::writeNameSection(raw_fd_ostream& OS) {
     }
   }
 
-  SectionBookkeeping Section = writeSectionHeader(WASM_SEC_CUSTOM, OS);
-  write_str("name", OS, "name section string name");
-  SectionBookkeeping SubSection = writeSectionHeader(WASM_NAMES_FUNCTION, OS);
-  write_uleb128(FunctionNameCount, OS, "name count");
+  SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_CUSTOM);
+  write_str(OS, "name", "name section string name");
+  SectionBookkeeping SubSection = writeSectionHeader(OS, WASM_NAMES_FUNCTION);
+  write_uleb128(OS, FunctionNameCount, "name count");
 
   // We have to iterate through the inputs twice so that all the imports
   // appear first before any of the local function names.
@@ -855,13 +863,13 @@ void Writer::writeNameSection(raw_fd_ostream& OS) {
         Expected<StringRef> NameOrError = Sym.getName();
         if (!NameOrError)
           fatal("error getting symbol name");
-        write_uleb128(File->relocateFunctionIndex(Sym.getValue()), OS, "func index");
-        write_str(*NameOrError, OS, "symbol name");
+        write_uleb128(OS, File->relocateFunctionIndex(Sym.getValue()), "func index");
+        write_str(OS, *NameOrError, "symbol name");
       }
     }
   }
-  endSection(SubSection, OS);
-  endSection(Section, OS);
+  endSection(OS, SubSection);
+  endSection(OS, Section);
 }
 
 void Writer::writeSections(raw_fd_ostream& OS) {
@@ -889,7 +897,7 @@ void Writer::layoutMemory() {
   uint32_t MemoryPtr = 0;
   if (!Config->Relocatable) {
     MemoryPtr += Config->GlobalBase;
-    debug_print("mem: global base = %d\n", Config->GlobalBase);
+    debugPrint("mem: global base = %d\n", Config->GlobalBase);
   }
 
   // Static data from input object files comes first
@@ -899,32 +907,32 @@ void Writer::layoutMemory() {
     uint32_t Size = WasmFile->linkingData().DataSize;
     if (Size) {
       MemoryPtr = alignTo(MemoryPtr, WasmFile->linkingData().DataAlignment);
-      debug_print("mem: [%s] offset=%#x size=%d\n",
+      debugPrint("mem: [%s] offset=%#x size=%d\n",
                   File->getName().str().c_str(), File->DataOffset, Size);
       File->DataOffset = MemoryPtr;
       MemoryPtr += Size;
     } else {
-      debug_print("mem: [%s] no data\n", File->getName().str().c_str());
+      debugPrint("mem: [%s] no data\n", File->getName().str().c_str());
     }
   }
 
   DataSize = MemoryPtr;
   if (!Config->Relocatable)
     DataSize -= Config->GlobalBase;
-  debug_print("mem: static data = %d\n", DataSize);
+  debugPrint("mem: static data = %d\n", DataSize);
 
   // Stack comes last
   if (!Config->Relocatable) {
-    debug_print("mem: stack size  = %d\n", Config->ZStackSize);
-    debug_print("mem: stack base  = %d\n", MemoryPtr);
+    debugPrint("mem: stack size  = %d\n", Config->ZStackSize);
+    debugPrint("mem: stack base  = %d\n", MemoryPtr);
     MemoryPtr += Config->ZStackSize;
     Config->SyntheticGlobals[0].second.InitExpr.Value.Int32 = MemoryPtr;
-    debug_print("mem: stack top   = %d\n", MemoryPtr);
+    debugPrint("mem: stack top   = %d\n", MemoryPtr);
   }
 
   uint32_t MemSize = alignTo(MemoryPtr, WasmPageSize);
   TotalMemoryPages = MemSize / WasmPageSize;
-  debug_print("mem: total pages = %d\n", TotalMemoryPages);
+  debugPrint("mem: total pages = %d\n", TotalMemoryPages);
 }
 
 void Writer::calculateOffsets() {
@@ -1090,8 +1098,8 @@ void Writer::openFile() {
 }
 
 void Writer::writeHeader() {
-  write_bytes(WasmMagic, sizeof(WasmMagic), *OS, "wasm magic");
-  write_u32(WasmVersion, *OS, "wasm version");
+  write_bytes(*OS, WasmMagic, sizeof(WasmMagic), "wasm magic");
+  write_u32(*OS, WasmVersion, "wasm version");
 }
 
 namespace lld {

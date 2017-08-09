@@ -50,7 +50,6 @@ private:
 
 extern LinkerDriver *Driver;
 void printHelp(const char *Argv0);
-llvm::Optional<std::string> searchLibrary(StringRef Name);
 
 } // namespace wasm
 } // namespace lld

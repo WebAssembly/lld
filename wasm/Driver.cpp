@@ -81,22 +81,25 @@ static uint64_t getZOptionValue(opt::InputArgList &Args, StringRef Key,
   return Default;
 }
 
+static std::vector<StringRef> getLines(MemoryBufferRef MB) {
+  SmallVector<StringRef, 0> Arr;
+  MB.getBuffer().split(Arr, '\n');
+
+  std::vector<StringRef> Ret;
+  for (StringRef S : Arr) {
+    S = S.trim();
+    if (!S.empty())
+      Ret.push_back(S);
+  }
+  return Ret;
+}
+
 static void parseUndefinedFile(StringRef Filename) {
   Optional<MemoryBufferRef> Buffer = readFile(Filename);
-  if (!Buffer.hasValue()) {
+  if (!Buffer.hasValue())
     return;
-  }
-  StringRef Str = Buffer->getBuffer();
-  size_t Pos = 0;
-  while (1) {
-    size_t NextLine = Str.find('\n', Pos);
-    StringRef SymbolName = Str.slice(Pos, NextLine);
-    if (!SymbolName.empty())
-      Config->AllowUndefinedSymbols.insert(SymbolName);
-    if (NextLine == StringRef::npos)
-      break;
-    Pos = NextLine + 1;
-  }
+  for (StringRef SymbolName : getLines(*Buffer))
+    Config->AllowUndefinedSymbols.insert(SymbolName);
 }
 
 // Parse -color-diagnostics={auto,always,never} or -no-color-diagnostics.
@@ -120,6 +123,40 @@ static bool getColorDiagnostics(opt::InputArgList &Args) {
   return false;
 }
 
+// Find a file by concatenating given paths. If a resulting path
+// starts with "=", the character is replaced with a --sysroot value.
+static Optional<std::string> findFile(StringRef Path1, const Twine &Path2) {
+  SmallString<128> S;
+  if (Path1.startswith("="))
+    path::append(S, Config->Sysroot, Path1.substr(1), Path2);
+  else
+    path::append(S, Path1, Path2);
+
+  if (fs::exists(S))
+    return S.str().str();
+  return None;
+}
+
+static Optional<std::string> findFromSearchPaths(StringRef Path) {
+  for (StringRef Dir : Config->SearchPaths)
+    if (Optional<std::string> S = findFile(Dir, Path))
+      return S;
+  return None;
+}
+
+// This is for -lfoo. We'll look for libfoo.so or libfoo.a from
+// search paths.
+static Optional<std::string> searchLibrary(StringRef Name) {
+  if (Name.startswith(":"))
+    return findFromSearchPaths(Name.substr(1));
+
+  for (StringRef Dir : Config->SearchPaths) {
+    if (Optional<std::string> S = findFile(Dir, "lib" + Name + ".a"))
+      return S;
+  }
+  return None;
+}
+
 WasmOptTable::WasmOptTable() : OptTable(OptInfo) {}
 
 opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
@@ -140,27 +177,20 @@ void LinkerDriver::addFile(StringRef Path) {
     return;
   MemoryBufferRef MBRef = *Buffer;
 
-  switch (identify_magic(MBRef.getBuffer())) {
-  case file_magic::archive:
+  if (identify_magic(MBRef.getBuffer()) == file_magic::archive)
     Files.push_back(make<ArchiveFile>(MBRef));
-    break;
-  default:
+  else
     Files.push_back(make<ObjectFile>(MBRef));
-    break;
-  }
 }
 
 void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
                                     StringRef ParentName) {
-  InputFile *Obj;
-  file_magic Magic = identify_magic(MB.getBuffer());
-  if (Magic == file_magic::wasm_object) {
-    Obj = make<ObjectFile>(MB);
-  } else {
+  if (identify_magic(MB.getBuffer()) != file_magic::wasm_object) {
     error("unknown file type: " + MB.getBufferIdentifier());
     return;
   }
 
+  InputFile *Obj = make<ObjectFile>(MB);
   Obj->ParentName = ParentName;
   Symtab->addFile(Obj);
   log("Including " + toString(Obj) + " for: " + SymName);
@@ -174,8 +204,9 @@ void LinkerDriver::addLibrary(StringRef Name) {
     error("unable to find library -l" + Name);
 }
 
+// Inject a new wasm global into the output binary with the given value
 void LinkerDriver::addSyntheticGlobal(StringRef Name, int32_t Value) {
-  log("injecting global: " + Twine(Name));
+  log("injecting global: " + Name);
   Symbol* S = Symtab->addDefinedGlobal(Name);
   S->setOutputIndex(Config->SyntheticGlobals.size());
 
@@ -187,8 +218,10 @@ void LinkerDriver::addSyntheticGlobal(StringRef Name, int32_t Value) {
   Config->SyntheticGlobals.emplace_back(S, Global);
 }
 
+// Inject a new undefined symbol into the link.  This will cause the link to
+// fail unless this symbol can be found.
 void LinkerDriver::addSyntheticUndefinedFunction(StringRef Name) {
-  log("injecting undefined func: " + Twine(Name));
+  log("injecting undefined func: " + Name);
   Symtab->addUndefinedFunction(Name);
 }
 
@@ -200,6 +233,7 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
       break;
     case OPT_INPUT:
       addFile(Arg->getValue());
+      break;
     }
   }
 
@@ -229,13 +263,10 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   Config->ColorDiagnostics = getColorDiagnostics(Args);
 
-  // GNU linkers disagree here. Though both -version and -v are mentioned
-  // in help to print the version information, GNU ld just normally exits,
-  // while gold can continue linking. We are compatible with ld.bfd here.
-  if (Args.hasArg(OPT_version) || Args.hasArg(OPT_v))
+  if (Args.hasArg(OPT_version) || Args.hasArg(OPT_v)) {
     outs() << getLLDVersion() << "\n";
-  if (Args.hasArg(OPT_version))
     return;
+  }
 
   Config->AllowUndefined = Args.hasArg(OPT_allow_undefined);
   Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
@@ -259,14 +290,16 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   if (!AllowUndefinedFilename.empty())
     parseUndefinedFile(AllowUndefinedFilename);
 
-  // Default output filename is "a.out" by the Unix tradition.
   if (Config->OutputFile.empty())
-    Config->OutputFile = "a.out";
+    fatal("no output file specified");
 
   if (!Args.hasArgNoClaim(OPT_INPUT))
     fatal("no input files");
 
-  if (!Config->Relocatable) {
+  if (Config->Relocatable) {
+    if (!Config->Entry.empty())
+      fatal("entry point specified creating relocatable wasm file");
+  } else {
     if (Config->Entry.empty())
       Config->Entry = "_start";
     addSyntheticUndefinedFunction(Config->Entry);
@@ -284,15 +317,16 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     Symtab.addFile(F);
 
   // Make sure we have resolved all symbols.
-  if (!Config->AllowUndefined && !Config->Relocatable)
+  if (!Config->Relocatable && !Config->AllowUndefined) {
     Symtab.reportRemainingUndefines();
+    if (ErrorCount)
+      return;
+  }
 
-  if (!Config->Relocatable) {
+  if (!Config->Entry.empty()) {
     Symbol* Sym = Symtab.find(Config->Entry);
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
-    if (!Sym->isDefined())
-      fatal("entry point undefined: " + Sym->getName());
   }
 
   // Write the result to the file.
@@ -312,40 +346,6 @@ bool link(ArrayRef<const char *> Args, raw_ostream &Error) {
   Driver = make<LinkerDriver>();
   Driver->link(Args);
   return !ErrorCount;
-}
-
-// Find a file by concatenating given paths. If a resulting path
-// starts with "=", the character is replaced with a --sysroot value.
-static Optional<std::string> findFile(StringRef Path1, const Twine &Path2) {
-  SmallString<128> S;
-  if (Path1.startswith("="))
-    path::append(S, Config->Sysroot, Path1.substr(1), Path2);
-  else
-    path::append(S, Path1, Path2);
-
-  if (fs::exists(S))
-    return S.str().str();
-  return None;
-}
-
-static Optional<std::string> findFromSearchPaths(StringRef Path) {
-  for (StringRef Dir : Config->SearchPaths)
-    if (Optional<std::string> S = findFile(Dir, Path))
-      return S;
-  return None;
-}
-
-// This is for -lfoo. We'll look for libfoo.so or libfoo.a from
-// search paths.
-Optional<std::string> searchLibrary(StringRef Name) {
-  if (Name.startswith(":"))
-    return findFromSearchPaths(Name.substr(1));
-
-  for (StringRef Dir : Config->SearchPaths) {
-    if (Optional<std::string> S = findFile(Dir, "lib" + Name + ".a"))
-      return S;
-  }
-  return None;
 }
 
 } // namespace wasm

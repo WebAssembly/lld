@@ -17,4 +17,3 @@ entry:
 }
 
 ; CHECK: error: {{.*}}.o: undefined symbol: foo
-; CHECK: error: link failed

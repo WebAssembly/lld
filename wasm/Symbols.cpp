@@ -101,10 +101,7 @@ bool Symbol::isWeak() const {
 
 // Returns a symbol name for an error message.
 std::string toString(wasm::Symbol &Sym) {
-  if (wasm::Config->Demangle)
-    if (Optional<std::string> S = wasm::demangle(Sym.getName()))
-      return *S;
-  return Sym.getName();
+  return wasm::displayName(Sym.getName());
 }
 
 std::string toString(wasm::Symbol::Kind &Kind) {
