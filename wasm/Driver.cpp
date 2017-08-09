@@ -48,13 +48,6 @@ static const opt::OptTable::Info OptInfo[] = {
 #undef OPTION
 };
 
-static StringRef getString(opt::InputArgList &Args, unsigned Key,
-                           StringRef Default = "") {
-  if (auto *Arg = Args.getLastArg(Key))
-    return Arg->getValue();
-  return Default;
-}
-
 static std::vector<StringRef> getArgs(opt::InputArgList &Args, int Id) {
   std::vector<StringRef> V;
   for (auto *Arg : Args.filtered(Id))
@@ -88,10 +81,11 @@ static uint64_t getZOptionValue(opt::InputArgList &Args, StringRef Key,
   return Default;
 }
 
-static bool parseUndefinedFile(StringRef Filename) {
+static void parseUndefinedFile(StringRef Filename) {
   Optional<MemoryBufferRef> Buffer = readFile(Filename);
-  if (!Buffer.hasValue())
-    return false;
+  if (!Buffer.hasValue()) {
+    return;
+  }
   StringRef Str = Buffer->getBuffer();
   size_t Pos = 0;
   while (1) {
@@ -103,19 +97,14 @@ static bool parseUndefinedFile(StringRef Filename) {
       break;
     Pos = NextLine + 1;
   }
-
-
-  return true;
 }
 
 // Parse -color-diagnostics={auto,always,never} or -no-color-diagnostics.
 static bool getColorDiagnostics(opt::InputArgList &Args) {
-  bool Default = (ErrorOS == &errs() && Process::StandardErrHasColors());
-
   auto *Arg = Args.getLastArg(OPT_color_diagnostics, OPT_color_diagnostics_eq,
                               OPT_no_color_diagnostics);
   if (!Arg)
-    return Default;
+    return ErrorOS->has_colors();
   if (Arg->getOption().getID() == OPT_color_diagnostics)
     return true;
   if (Arg->getOption().getID() == OPT_no_color_diagnostics)
@@ -123,7 +112,7 @@ static bool getColorDiagnostics(opt::InputArgList &Args) {
 
   StringRef S = Arg->getValue();
   if (S == "auto")
-    return Default;
+    return ErrorOS->has_colors();
   if (S == "always")
     return true;
   if (S != "never")
@@ -250,14 +239,14 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   Config->AllowUndefined = Args.hasArg(OPT_allow_undefined);
   Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
-  Config->Entry = getString(Args, OPT_entry);
+  Config->Entry = Args.getLastArgValue(OPT_entry);
   Config->ImportMemory = Args.hasArg(OPT_import_memory);
-  Config->OutputFile = getString(Args, OPT_o);
+  Config->OutputFile = Args.getLastArgValue(OPT_o);
   Config->Relocatable = Args.hasArg(OPT_relocatable);
   Config->SearchPaths = getArgs(Args, OPT_L);
   Config->StripAll = Args.hasArg(OPT_strip_all);
   Config->StripDebug = Args.hasArg(OPT_strip_debug);
-  Config->Sysroot = getString(Args, OPT_sysroot);
+  Config->Sysroot = Args.getLastArgValue(OPT_sysroot);
   Config->Verbose = Args.hasArg(OPT_verbose);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);
@@ -266,11 +255,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->MaxMemory = getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize = getZOptionValue(Args, "stack-size", WasmPageSize);
 
-  StringRef AllowUndefinedFilename = getString(Args, OPT_allow_undefined_file);
-  if (!AllowUndefinedFilename.empty()) {
-    if (!parseUndefinedFile(AllowUndefinedFilename))
-      return;
-  }
+  StringRef AllowUndefinedFilename = Args.getLastArgValue(OPT_allow_undefined_file);
+  if (!AllowUndefinedFilename.empty())
+    parseUndefinedFile(AllowUndefinedFilename);
 
   // Default output filename is "a.out" by the Unix tradition.
   if (Config->OutputFile.empty())
