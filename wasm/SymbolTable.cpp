@@ -159,15 +159,13 @@ Symbol *SymbolTable::addUndefined(InputFile* F, const WasmSymbol *Sym) {
   std::tie(S, WasInserted) = insert(Sym->Name);
   if (WasInserted) {
     S->update(Kind, F, Sym);
-  } else {
-    if (S->isLazy()) {
-      DEBUG(dbgs() << "resolved by existing lazy\n");
-      auto *AF = cast<ArchiveFile>(S->getFile());
-      AF->addMember(&S->getArchiveSymbol());
-    } else if (S->isDefined()) {
-      DEBUG(dbgs() << "resolved by existing\n");
-      checkSymbolTypes(S, F, Sym);
-    }
+  } else if (S->isLazy()) {
+    DEBUG(dbgs() << "resolved by existing lazy\n");
+    auto *AF = cast<ArchiveFile>(S->getFile());
+    AF->addMember(&S->getArchiveSymbol());
+  } else if (S->isDefined()) {
+    DEBUG(dbgs() << "resolved by existing\n");
+    checkSymbolTypes(S, F, Sym);
   }
   return S;
 }

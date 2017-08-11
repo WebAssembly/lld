@@ -49,7 +49,6 @@ private:
 };
 
 extern LinkerDriver *Driver;
-void printHelp(const char *Argv0);
 
 } // namespace wasm
 } // namespace lld

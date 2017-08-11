@@ -32,6 +32,18 @@ std::vector<SpecificAllocBase *> SpecificAllocBase::Instances;
 Configuration *Config;
 LinkerDriver *Driver;
 
+bool link(ArrayRef<const char *> Args, raw_ostream &Error) {
+  ErrorCount = 0;
+  Argv0 = Args[0];
+  ErrorOS = &Error;
+  Config = make<Configuration>();
+  Driver = make<LinkerDriver>();
+  Symtab = make<SymbolTable>();
+
+  Driver->link(Args);
+  return !ErrorCount;
+}
+
 // Create OptTable
 
 // Create prefix string literals used in Options.td
@@ -125,35 +137,20 @@ static bool getColorDiagnostics(opt::InputArgList &Args) {
 
 // Find a file by concatenating given paths. If a resulting path
 // starts with "=", the character is replaced with a --sysroot value.
-static Optional<std::string> findFile(StringRef Path1, const Twine &Path2) {
+static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
   SmallString<128> S;
-  if (Path1.startswith("="))
-    path::append(S, Config->Sysroot, Path1.substr(1), Path2);
-  else
-    path::append(S, Path1, Path2);
-
+  path::append(S, Path1, Path2);
   if (fs::exists(S))
-    return S.str().str();
-  return None;
-}
-
-static Optional<std::string> findFromSearchPaths(StringRef Path) {
-  for (StringRef Dir : Config->SearchPaths)
-    if (Optional<std::string> S = findFile(Dir, Path))
-      return S;
+    return S.str();
   return None;
 }
 
 // This is for -lfoo. We'll look for libfoo.so or libfoo.a from
 // search paths.
-static Optional<std::string> searchLibrary(StringRef Name) {
-  if (Name.startswith(":"))
-    return findFromSearchPaths(Name.substr(1));
-
-  for (StringRef Dir : Config->SearchPaths) {
-    if (Optional<std::string> S = findFile(Dir, "lib" + Name + ".a"))
+static Optional<StringRef> searchLibrary(StringRef Name) {
+  for (StringRef Dir : Config->SearchPaths)
+    if (Optional<StringRef> S = findFile(Dir, "lib" + Name + ".a"))
       return S;
-  }
   return None;
 }
 
@@ -169,6 +166,11 @@ opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
   for (auto *Arg : Args.filtered(OPT_UNKNOWN))
     fatal(Twine("unknown argument: ") + Arg->getSpelling());
   return Args;
+}
+
+static void printHelp(const char *Argv0) {
+  WasmOptTable Table;
+  Table.PrintHelp(outs(), Argv0, "LLVM Linker", false);
 }
 
 void LinkerDriver::addFile(StringRef Path) {
@@ -198,13 +200,16 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
 
 // Add a given library by searching it from input search paths.
 void LinkerDriver::addLibrary(StringRef Name) {
-  if (Optional<std::string> Path = searchLibrary(Name))
+  if (Optional<StringRef> Path = searchLibrary(Name))
     addFile(*Path);
   else
     error("unable to find library -l" + Name);
 }
 
-// Inject a new wasm global into the output binary with the given value
+// Inject a new wasm global into the output binary with the given value.
+// Wasm global are used in relocatable object files to model symbol imports
+// and exports.  In the final exectuable the only use of wasm globals is the
+// for the exlicit stack pointer (__stack_pointer).
 void LinkerDriver::addSyntheticGlobal(StringRef Name, int32_t Value) {
   log("injecting global: " + Name);
   Symbol* S = Symtab->addDefinedGlobal(Name);
@@ -227,7 +232,7 @@ void LinkerDriver::addSyntheticUndefinedFunction(StringRef Name) {
 
 void LinkerDriver::createFiles(opt::InputArgList &Args) {
   for (auto *Arg : Args) {
-    switch (Arg->getOption().getID()) {
+    switch (Arg->getOption().getUnaliasedOption().getID()) {
     case OPT_l:
       addLibrary(Arg->getValue());
       break;
@@ -242,9 +247,6 @@ void LinkerDriver::createFiles(opt::InputArgList &Args) {
 }
 
 void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
-  SymbolTable Symtab;
-  wasm::Symtab = &Symtab;
-
   WasmOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
 
@@ -296,10 +298,10 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   if (!Args.hasArgNoClaim(OPT_INPUT))
     fatal("no input files");
 
-  if (Config->Relocatable) {
-    if (!Config->Entry.empty())
-      fatal("entry point specified creating relocatable wasm file");
-  } else {
+  if (Config->Relocatable && !Config->Entry.empty())
+    fatal("entry point specified for relocatable output file");
+
+  if (!Config->Relocatable) {
     if (Config->Entry.empty())
       Config->Entry = "_start";
     addSyntheticUndefinedFunction(Config->Entry);
@@ -314,38 +316,23 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Add all files to the symbol table. This will add almost all
   // symbols that we need to the symbol table.
   for (InputFile *F : Files)
-    Symtab.addFile(F);
+    Symtab->addFile(F);
 
   // Make sure we have resolved all symbols.
   if (!Config->Relocatable && !Config->AllowUndefined) {
-    Symtab.reportRemainingUndefines();
+    Symtab->reportRemainingUndefines();
     if (ErrorCount)
       return;
   }
 
   if (!Config->Entry.empty()) {
-    Symbol* Sym = Symtab.find(Config->Entry);
+    Symbol* Sym = Symtab->find(Config->Entry);
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
   }
 
   // Write the result to the file.
-  writeResult(&Symtab);
-}
-
-void printHelp(const char *Argv0) {
-  WasmOptTable Table;
-  Table.PrintHelp(outs(), Argv0, "LLVM Linker", false);
-}
-
-bool link(ArrayRef<const char *> Args, raw_ostream &Error) {
-  ErrorCount = 0;
-  Argv0 = Args[0];
-  ErrorOS = &Error;
-  Config = make<Configuration>();
-  Driver = make<LinkerDriver>();
-  Driver->link(Args);
-  return !ErrorCount;
+  writeResult(Symtab);
 }
 
 } // namespace wasm

@@ -62,7 +62,7 @@ private:
   const Kind FileKind;
 };
 
-// .lib or .a file.
+// .a file (ar archive)
 class ArchiveFile : public InputFile {
 public:
   explicit ArchiveFile(MemoryBufferRef M) : InputFile(ArchiveKind, M) {}
@@ -77,12 +77,8 @@ private:
   llvm::DenseSet<uint64_t> Seen;
 };
 
-// .o file.
+// .o file (wasm object file)
 class ObjectFile : public InputFile {
-  std::unique_ptr<WasmObjectFile> WasmObj;
-
-  void initializeSymbols();
-
 public:
   explicit ObjectFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
@@ -92,7 +88,7 @@ public:
 
   void parse() override;
 
-  // Returns the underying wasm file.
+  // Returns the underlying wasm file.
   const WasmObjectFile *getWasmObj() { return WasmObj.get(); }
 
   void dumpInfo() const;
@@ -105,9 +101,17 @@ public:
 
   int32_t getGlobalAddress(uint32_t index) const;
 
+  // Returns true if the given function index is an imported function,
+  // as opposed to the locally defined function.
   bool isImportedFunction(uint32_t index) const;
+  // Returns true if the given global index is an imported global,
+  // as opposed to the locally defined (exported) global.
   bool isImportedGlobal(uint32_t index) const;
+  // Return true if the given imported (undefined) function has been resolved
+  // in the output binary (i.e. defined by another object).
   bool isResolvedFunctionImport(uint32_t index) const;
+  // Return true if the given imported (undefined) global has been resolved
+  // in the output binary (i.e. defined by another object).
   bool isResolvedGlobalImport(uint32_t index) const;
 
   int32_t FunctionIndexOffset = 0;
@@ -120,6 +124,11 @@ public:
   llvm::DenseMap<uint32_t, uint32_t> TypeMap;
   std::vector<StringRef> FunctionImports;
   std::vector<StringRef> GlobalImports;
+
+private:
+  std::unique_ptr<WasmObjectFile> WasmObj;
+
+  void initializeSymbols();
 };
 
 // Opens a given file.

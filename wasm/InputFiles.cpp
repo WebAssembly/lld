@@ -55,36 +55,38 @@ void ObjectFile::dumpInfo() const {
   log("       GlobalImports.size() : " + Twine(GlobalImports.size()));
 }
 
-bool ObjectFile::isImportedFunction(uint32_t index) const {
-  return index < FunctionImports.size();
+bool ObjectFile::isImportedFunction(uint32_t Index) const {
+  return Index < FunctionImports.size();
 }
 
-bool ObjectFile::isImportedGlobal(uint32_t index) const {
-  return index < GlobalImports.size();
+bool ObjectFile::isImportedGlobal(uint32_t Index) const {
+  return Index < GlobalImports.size();
 }
 
-bool ObjectFile::isResolvedFunctionImport(uint32_t index) const {
-  if (!isImportedFunction(index))
+bool ObjectFile::isResolvedFunctionImport(uint32_t Index) const {
+  if (!isImportedFunction(Index))
     return false;
-  StringRef Name = FunctionImports[index];
-  Symbol* Sym = Symtab->find(Name);
+  StringRef Name = FunctionImports[Index];
+  Symbol *Sym = Symtab->find(Name);
+  assert(Sym);
   return Sym->isDefined();
 }
 
-bool ObjectFile::isResolvedGlobalImport(uint32_t index) const {
-  if (!isImportedGlobal(index))
+bool ObjectFile::isResolvedGlobalImport(uint32_t Index) const {
+  if (!isImportedGlobal(Index))
     return false;
-  StringRef Name = GlobalImports[index];
-  Symbol* Sym = Symtab->find(Name);
+  StringRef Name = GlobalImports[Index];
+  Symbol *Sym = Symtab->find(Name);
+  assert(Sym);
   return Sym->isDefined();
 }
 
-int32_t ObjectFile::getGlobalAddress(uint32_t index) const {
-  if (isImportedGlobal(index))
+int32_t ObjectFile::getGlobalAddress(uint32_t Index) const {
+  if (isImportedGlobal(Index))
     return 0;
 
-  index -= GlobalImports.size();
-  const WasmGlobal &Global = WasmObj->globals()[index];
+  Index -= GlobalImports.size();
+  const WasmGlobal &Global = WasmObj->globals()[Index];
   assert(Global.Type == WASM_TYPE_I32);
   return Global.InitExpr.Value.Int32 + DataOffset;
 }
@@ -93,12 +95,13 @@ uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
   DEBUG(dbgs() << "relocateFunctionIndex: " << original << "\n");
   if (isImportedFunction(original)) {
     StringRef Name = FunctionImports[original];
-    Symbol* Sym = Symtab->find(Name);
+    Symbol *Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   }
 
-  DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " " << (original + FunctionIndexOffset) << "\n");
+  DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " "
+               << (original + FunctionIndexOffset) << "\n");
   return original + FunctionIndexOffset;
 }
 
@@ -186,15 +189,13 @@ void ObjectFile::initializeSymbols() {
 
 Symbol *ObjectFile::createUndefined(const WasmSymbol &Sym) {
   Symbol *S = Symtab->addUndefined(this, &Sym);
-  if (S)
-    Symbols.push_back(S);
+  Symbols.push_back(S);
   return S;
 }
 
 Symbol *ObjectFile::createDefined(const WasmSymbol &Sym) {
   Symbol *S = Symtab->addDefined(this, &Sym);
-  if (S)
-    Symbols.push_back(S);
+  Symbols.push_back(S);
   return S;
 }
 
@@ -203,7 +204,7 @@ void ArchiveFile::parse() {
   DEBUG(dbgs() << "Parsing library: " << toString(this) << "\n");
   File = check(Archive::create(MB), toString(this));
 
-  // Read the symbol table to construct Lazy objects.
+  // Read the symbol table to construct Lazy symbols.
   for (const Archive::Symbol &Sym : File->symbols())
     Symtab->addLazy(this, &Sym);
 }
