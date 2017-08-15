@@ -145,15 +145,6 @@ static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
   return None;
 }
 
-// This is for -lfoo. We'll look for libfoo.so or libfoo.a from
-// search paths.
-static Optional<StringRef> searchLibrary(StringRef Name) {
-  for (StringRef Dir : Config->SearchPaths)
-    if (Optional<StringRef> S = findFile(Dir, "lib" + Name + ".a"))
-      return S;
-  return None;
-}
-
 WasmOptTable::WasmOptTable() : OptTable(OptInfo) {}
 
 opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
@@ -200,10 +191,14 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
 
 // Add a given library by searching it from input search paths.
 void LinkerDriver::addLibrary(StringRef Name) {
-  if (Optional<StringRef> Path = searchLibrary(Name))
-    addFile(*Path);
-  else
-    error("unable to find library -l" + Name);
+  for (StringRef Dir : Config->SearchPaths) {
+    if (Optional<StringRef> S = findFile(Dir, "lib" + Name + ".a")) {
+      addFile(*S);
+      return;
+    }
+  }
+
+  error("unable to find library -l" + Name);
 }
 
 // Inject a new wasm global into the output binary with the given value.

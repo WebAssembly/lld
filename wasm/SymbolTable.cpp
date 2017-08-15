@@ -179,7 +179,7 @@ void SymbolTable::addLazy(ArchiveFile *F, const Archive::Symbol *Sym) {
   if (WasInserted) {
     S->update(Symbol::LazyKind, F);
     S->setArchiveSymbol(*Sym);
-  } else if (S->isUndefined()) {
+  } else if (S->isUndefined() && !S->isLazy()) {
     // There is an existing undefined symbol.  The can load from the
     // archive.
     DEBUG(dbgs() << "replacing existing undefined\n");
