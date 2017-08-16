@@ -451,7 +451,11 @@ static bool includeInSymtab(const SymbolBody &B) {
     if (auto *S = dyn_cast<MergeInputSection>(Sec))
       if (!S->getSectionPiece(D->Value)->Live)
         return false;
+    return true;
   }
+
+  if (auto *Sym = dyn_cast<DefinedCommon>(&B))
+    return Sym->Live;
   return true;
 }
 
@@ -1149,6 +1153,39 @@ static void removeUnusedSyntheticSections() {
   }
 }
 
+// Returns true if a symbol can be replaced at load-time by a symbol
+// with the same name defined in other ELF executable or DSO.
+static bool computeIsPreemptible(const SymbolBody &B) {
+  assert(!B.isLocal());
+  // Shared symbols resolve to the definition in the DSO. The exceptions are
+  // symbols with copy relocations (which resolve to .bss) or preempt plt
+  // entries (which resolve to that plt entry).
+  if (auto *SS = dyn_cast<SharedSymbol>(&B))
+    return !SS->CopyRelSec && !SS->NeedsPltAddr;
+
+  // Only symbols that appear in dynsym can be preempted.
+  if (!B.symbol()->includeInDynsym())
+    return false;
+
+  // Only default visibility symbols can be preempted.
+  if (B.symbol()->Visibility != STV_DEFAULT)
+    return false;
+
+  // Undefined symbols in non-DSOs are usually just an error, so it
+  // doesn't matter whether we return true or false here. However, if
+  // -unresolved-symbols=ignore-all is specified, undefined symbols in
+  // executables are automatically exported so that the runtime linker
+  // can try to resolve them. In that case, they is preemptible. So, we
+  // return true for an undefined symbol in case the option is specified.
+  if (!Config->Shared)
+    return B.isUndefined();
+
+  // -Bsymbolic means that definitions are not preempted.
+  if (Config->Bsymbolic || (Config->BsymbolicFunctions && B.isFunc()))
+    return !B.isDefined();
+  return true;
+}
+
 // Create output section objects and add them to OutputSections.
 template <class ELFT> void Writer<ELFT>::finalizeSections() {
   Out::DebugInfo = findSection(".debug_info");
@@ -1181,6 +1218,9 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // earlier.
   applySynthetic({In<ELFT>::EhFrame},
                  [](SyntheticSection *SS) { SS->finalizeContents(); });
+
+  for (Symbol *S : Symtab->getSymbols())
+    S->body()->IsPreemptible = computeIsPreemptible(*S->body());
 
   // Scan relocations. This must be done after every symbol is declared so that
   // we can correctly decide if a dynamic relocation is needed.
@@ -1253,14 +1293,18 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
 
   // Dynamic section must be the last one in this list and dynamic
   // symbol table section (DynSymTab) must be the first one.
-  applySynthetic({InX::DynSymTab,    InX::Bss,           InX::BssRelRo,
-                  InX::GnuHashTab,   In<ELFT>::HashTab,  InX::SymTab,
-                  InX::ShStrTab,     InX::StrTab,        In<ELFT>::VerDef,
-                  InX::DynStrTab,    InX::GdbIndex,      InX::Got,
-                  InX::MipsGot,      InX::IgotPlt,       InX::GotPlt,
-                  In<ELFT>::RelaDyn, In<ELFT>::RelaIplt, In<ELFT>::RelaPlt,
-                  InX::Plt,          InX::Iplt,          In<ELFT>::EhFrameHdr,
-                  In<ELFT>::VerSym,  In<ELFT>::VerNeed,  InX::Dynamic},
+  applySynthetic({InX::DynSymTab,    InX::Bss,
+                  InX::BssRelRo,     InX::GnuHashTab,
+                  In<ELFT>::HashTab, InX::SymTab,
+                  InX::ShStrTab,     InX::StrTab,
+                  In<ELFT>::VerDef,  InX::DynStrTab,
+                  InX::Got,          InX::MipsGot,
+                  InX::IgotPlt,      InX::GotPlt,
+                  In<ELFT>::RelaDyn, In<ELFT>::RelaIplt,
+                  In<ELFT>::RelaPlt, InX::Plt,
+                  InX::Iplt,         In<ELFT>::EhFrameHdr,
+                  In<ELFT>::VerSym,  In<ELFT>::VerNeed,
+                  InX::Dynamic},
                  [](SyntheticSection *SS) { SS->finalizeContents(); });
 
   // Some architectures use small displacements for jump instructions.
@@ -1811,33 +1855,31 @@ template <class ELFT> void Writer<ELFT>::writeSectionsBinary() {
       Sec->writeTo<ELFT>(Buf + Sec->Offset);
 }
 
-static void fillTrapInstr(uint8_t *I, uint8_t *End) {
+static void fillTrap(uint8_t *I, uint8_t *End) {
   for (; I + 4 < End; I += 4)
     memcpy(I, &Target->TrapInstr, 4);
 }
 
-
-// Fill the first and the last page of executable segments with trap
-// instructions instead of leaving them as zero. Even though it is not required
-// by any standard , it is in general a good thing to do for security reasons.
+// Fill the last page of executable segments with trap instructions
+// instead of leaving them as zero. Even though it is not required by any
+// standard, it is in general a good thing to do for security reasons.
+//
+// We'll leave other pages in segments as-is because the rest will be
+// overwritten by output sections.
 template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
   if (Script->Opt.HasSections)
     return;
 
+  // Fill the last page.
   uint8_t *Buf = Buffer->getBufferStart();
+  for (PhdrEntry *P : Phdrs)
+    if (P->p_type == PT_LOAD && (P->p_flags & PF_X))
+      fillTrap(Buf + alignDown(P->p_offset + P->p_filesz, Target->PageSize),
+               Buf + alignTo(P->p_offset + P->p_filesz, Target->PageSize));
 
-  for (PhdrEntry *P : Phdrs) {
-    if (P->p_type != PT_LOAD || !(P->p_flags & PF_X))
-      continue;
-
-    // We only fill the first and the last page of the segment because the
-    // middle part will be overwritten by output sections.
-    fillTrapInstr(Buf + alignDown(P->p_offset, Target->PageSize),
-                  Buf + alignTo(P->p_offset, Target->PageSize));
-    fillTrapInstr(Buf + alignDown(P->p_offset + P->p_filesz, Target->PageSize),
-                  Buf + alignTo(P->p_offset + P->p_filesz, Target->PageSize));
-  }
-
+  // Round up the file size of the last segment to the page boundary iff it is
+  // an executable segment to ensure that other other tools don't accidentally
+  // trim the instruction padding (e.g. when stripping the file).
   PhdrEntry *LastRX = nullptr;
   for (PhdrEntry *P : Phdrs) {
     if (P->p_type != PT_LOAD)
@@ -1847,10 +1889,6 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
     else
       LastRX = nullptr;
   }
-
-  // Round up the file size of the last segment to the page boundary iff it is
-  // an executable segment to ensure that other other tools don't accidentally
-  // trim the instruction padding (e.g. when stripping the file).
   if (LastRX)
     LastRX->p_filesz = alignTo(LastRX->p_filesz, Target->PageSize);
 }
