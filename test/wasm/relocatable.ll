@@ -100,9 +100,9 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         Offset:          0x00000013
 ; CHECK-NEXT:     Functions:       
 ; CHECK-NEXT:       - Locals:          
-; CHECK-NEXT:         Body:          {{.*}}
+; CHECK-NEXT:         Body:          4180808080001080808080000B
 ; CHECK-NEXT:       - Locals:          
-; CHECK-NEXT:         Body:          {{.*}}
+; CHECK-NEXT:         Body:          1081808080001A41010B
 ; CHECK-NEXT:   - Type:            DATA
 ; CHECK-NEXT:     Relocations:     
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_TABLE_INDEX_I32

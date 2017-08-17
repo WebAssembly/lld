@@ -3,7 +3,7 @@
 ; RUN: lld -flavor wasm -o %t.wasm %t2.o %t.o
 ; RUN: obj2yaml %t.wasm | FileCheck %s
 
-; Wasm module generated from the following C code:
+; bitcode generated from the following C code:
 ; int foo(void) { return 1; }
 ; int (*indirect_func)(void) = &foo;
 ; void _start(void) { indirect_func(); }
