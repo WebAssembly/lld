@@ -689,8 +689,8 @@ static unsigned getSectionRank(const OutputSection *Sec) {
   if (IsNoBits)
     Rank |= RF_BSS;
 
-  // // Some architectures have additional ordering restrictions for sections
-  // // within the same PT_LOAD.
+  // Some architectures have additional ordering restrictions for sections
+  // within the same PT_LOAD.
   if (Config->EMachine == EM_PPC64) {
     // PPC64 has a number of special SHT_PROGBITS+SHF_ALLOC+SHF_WRITE sections
     // that we would like to make sure appear is a specific order to maximize
@@ -1856,7 +1856,7 @@ template <class ELFT> void Writer<ELFT>::writeSectionsBinary() {
 }
 
 static void fillTrap(uint8_t *I, uint8_t *End) {
-  for (; I + 4 < End; I += 4)
+  for (; I + 4 <= End; I += 4)
     memcpy(I, &Target->TrapInstr, 4);
 }
 
