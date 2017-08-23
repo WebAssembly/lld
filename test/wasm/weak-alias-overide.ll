@@ -31,6 +31,13 @@ entry:
 ; CHECK-NEXT:         ParamTypes:      
 ; CHECK-NEXT:   - Type:            FUNCTION
 ; CHECK-NEXT:     FunctionTypes:   [ 0, 1, 0, 0 ]
+; CHECK-NEXT:   - Type:            TABLE
+; CHECK-NEXT:     Tables:          
+; CHECK-NEXT:       - ElemType:        ANYFUNC
+; CHECK-NEXT:         Limits:          
+; CHECK-NEXT:           Flags:           0x00000001
+; CHECK-NEXT:           Initial:         0x00000001
+; CHECK-NEXT:           Maximum:         0x00000001
 ; CHECK-NEXT:   - Type:            MEMORY
 ; CHECK-NEXT:     Memories:        
 ; CHECK-NEXT:       - Initial:         0x00000002

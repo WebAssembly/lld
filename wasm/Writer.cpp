@@ -494,8 +494,6 @@ void Writer::writeGlobalSection(raw_fd_ostream& OS) {
 }
 
 void Writer::writeTableSection(raw_fd_ostream& OS) {
-  if (TotalTableLength == InitialTableOffset)
-    return;
   SectionBookkeeping Section = writeSectionHeader(OS, WASM_SEC_TABLE);
   write_uleb128(OS, 1, "table count");
   write_sleb128(OS, WASM_TYPE_ANYFUNC, "table type");
