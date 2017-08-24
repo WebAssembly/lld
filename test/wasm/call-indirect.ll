@@ -57,7 +57,7 @@ entry:
 ; CHECK-NEXT:         Mutable:         true
 ; CHECK-NEXT:         InitExpr:        
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           66568
+; CHECK-NEXT:           Value:           66576
 ; CHECK-NEXT:   - Type:            EXPORT
 ; CHECK-NEXT:     Exports:         
 ; CHECK-NEXT:       - Name:            memory
