@@ -27,6 +27,8 @@ using namespace lld::wasm;
 
 namespace {
 
+static const int kStackAlignment = 16;
+
 enum class RelocEncoding {
   Uleb128,
   Sleb128,
@@ -919,8 +921,11 @@ void Writer::layoutMemory() {
     DataSize -= Config->GlobalBase;
   debugPrint("mem: static data = %d\n", DataSize);
 
-  // Stack comes last
+  // Stack comes after static data
   if (!Config->Relocatable) {
+    MemoryPtr = alignTo(MemoryPtr, kStackAlignment);
+    if (Config->ZStackSize != alignTo(Config->ZStackSize, kStackAlignment))
+      error("stack size must be " + Twine(kStackAlignment) + "-byte aligned");
     debugPrint("mem: stack size  = %d\n", Config->ZStackSize);
     debugPrint("mem: stack base  = %d\n", MemoryPtr);
     MemoryPtr += Config->ZStackSize;
