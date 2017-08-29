@@ -276,6 +276,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->StripDebug = Args.hasArg(OPT_strip_debug);
   Config->Sysroot = Args.getLastArgValue(OPT_sysroot);
   Config->Verbose = Args.hasArg(OPT_verbose);
+  Config->Threads = !Args.hasArg(OPT_no_threads);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);
   Config->ErrorLimit = getInteger(Args, OPT_error_limit, 20);

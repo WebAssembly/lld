@@ -23,6 +23,9 @@ def l: JoinedOrSeparate<["-"], "l">, MetaVarName<"<libName>">,
 
 def mllvm: S<"mllvm">, HelpText<"Options to pass to LLVM">;
 
+def no_threads: F<"no-threads">,
+  HelpText<"Do not run the linker multi-threaded">;
+
 def no_color_diagnostics: F<"no-color-diagnostics">,
   HelpText<"Do not use colors in diagnostics">;
 

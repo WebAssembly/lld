@@ -13,6 +13,7 @@
 #include "Error.h"
 #include "Memory.h"
 #include "SymbolTable.h"
+#include "Threads.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/FileOutputBuffer.h"
@@ -1124,9 +1125,9 @@ void Writer::writeHeader() {
 
 void Writer::writeSections() {
   uint8_t* Buf = Buffer->getBufferStart();
-  for (OutputSection *S : OutputSections) {
+  parallelForEach(OutputSections, [Buf](OutputSection *S) {
     S->writeTo(Buf);
-  }
+  });
 }
 
 void Writer::layoutMemory() {

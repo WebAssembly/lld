@@ -27,11 +27,12 @@ struct Configuration {
   bool ColorDiagnostics = false;
   bool Demangle = true;
   bool EmitRelocs = false;
+  bool ImportMemory = false;
   bool Relocatable = false;
   bool Verbose = false;
   bool StripDebug = false;
   bool StripAll = false;
-  bool ImportMemory = false;
+  bool Threads = false;
   uint32_t ZStackSize = 0;
   uint32_t MaxMemory = 0;
   uint32_t GlobalBase = 0;
