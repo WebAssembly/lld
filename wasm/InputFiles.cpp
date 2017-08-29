@@ -8,12 +8,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "InputFiles.h"
-#include "SymbolTable.h"
+
 #include "Config.h"
 #include "Driver.h"
 #include "Error.h"
 #include "Memory.h"
 #include "Strings.h"
+#include "SymbolTable.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Support/raw_ostream.h"

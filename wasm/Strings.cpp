@@ -8,8 +8,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Config.h"
-#include "llvm/Demangle/Demangle.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Demangle/Demangle.h"
 
 using namespace llvm;
 

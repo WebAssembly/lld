@@ -7,16 +7,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Writer.h"
+
 #include "Config.h"
 #include "Error.h"
 #include "Memory.h"
 #include "SymbolTable.h"
-#include "Writer.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LEB128.h"
+
 #include <cstdarg>
 
 #define DEBUG_TYPE "lld"

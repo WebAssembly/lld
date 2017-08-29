@@ -10,7 +10,6 @@
 #include "Error.h"
 
 #include "Config.h"
-
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ManagedStatic.h"
