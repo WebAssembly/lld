@@ -47,13 +47,13 @@ Optional<MemoryBufferRef> readFile(StringRef Path) {
 }
 
 void ObjectFile::dumpInfo() const {
-  log("reloc info for: " + getName());
-  log("        FunctionIndexOffset : " + Twine(FunctionIndexOffset));
-  log("     FunctionImports.size() : " + Twine(FunctionImports.size()));
-  log("           TableIndexOffset : " + Twine(TableIndexOffset));
-  log("          GlobalIndexOffset : " + Twine(GlobalIndexOffset));
-  log("                 DataOffset : " + Twine(DataOffset));
-  log("       GlobalImports.size() : " + Twine(GlobalImports.size()));
+  log("reloc info for: " + getName() + "\n" +
+      "        FunctionIndexOffset : " + Twine(FunctionIndexOffset) + "\n" +
+      "     FunctionImports.size() : " + Twine(FunctionImports.size()) + "\n" +
+      "           TableIndexOffset : " + Twine(TableIndexOffset) + "\n" +
+      "          GlobalIndexOffset : " + Twine(GlobalIndexOffset) + "\n" +
+      "                 DataOffset : " + Twine(DataOffset) + "\n" +
+      "       GlobalImports.size() : " + Twine(GlobalImports.size()) + "\n");
 }
 
 bool ObjectFile::isImportedFunction(uint32_t Index) const {
@@ -86,44 +86,43 @@ int32_t ObjectFile::getGlobalAddress(uint32_t Index) const {
   if (isImportedGlobal(Index))
     return 0;
 
-  Index -= GlobalImports.size();
-  const WasmGlobal &Global = WasmObj->globals()[Index];
+  const WasmGlobal &Global = WasmObj->globals()[Index - GlobalImports.size()];
   assert(Global.Type == WASM_TYPE_I32);
   return Global.InitExpr.Value.Int32 + DataOffset;
 }
 
-uint32_t ObjectFile::relocateFunctionIndex(uint32_t original) const {
-  DEBUG(dbgs() << "relocateFunctionIndex: " << original << "\n");
-  if (isImportedFunction(original)) {
-    StringRef Name = FunctionImports[original];
+uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) const {
+  DEBUG(dbgs() << "relocateFunctionIndex: " << Original << "\n");
+  if (isImportedFunction(Original)) {
+    StringRef Name = FunctionImports[Original];
     Symbol *Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   }
 
-  DEBUG(dbgs() << " ---> " << FunctionIndexOffset << " "
-               << (original + FunctionIndexOffset) << "\n");
-  return original + FunctionIndexOffset;
+  DEBUG(dbgs() << " -> " << FunctionIndexOffset << " "
+               << (Original + FunctionIndexOffset) << "\n");
+  return Original + FunctionIndexOffset;
 }
 
-uint32_t ObjectFile::relocateTypeIndex(uint32_t original) const {
-  assert(TypeMap.count(original) > 0);
-  return TypeMap.find(original)->second;
+uint32_t ObjectFile::relocateTypeIndex(uint32_t Original) const {
+  assert(TypeMap.count(Original) > 0);
+  return TypeMap.find(Original)->second;
 }
 
-uint32_t ObjectFile::relocateTableIndex(uint32_t original) const {
-  return original + TableIndexOffset;
+uint32_t ObjectFile::relocateTableIndex(uint32_t Original) const {
+  return Original + TableIndexOffset;
 }
 
-uint32_t ObjectFile::relocateGlobalIndex(uint32_t original) const {
-  if (isImportedGlobal(original)) {
-    StringRef Name = GlobalImports[original];
+uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) const {
+  if (isImportedGlobal(Original)) {
+    StringRef Name = GlobalImports[Original];
     Symbol *Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   }
 
-  return original + GlobalIndexOffset;
+  return Original + GlobalIndexOffset;
 }
 
 void ObjectFile::parse() {
@@ -133,15 +132,15 @@ void ObjectFile::parse() {
 
   auto *Obj = dyn_cast<WasmObjectFile>(Bin.get());
   if (!Obj)
-    fatal(toString(this) + " is not a wasm file");
-  // TODO(sbc): Enable this change once the llvm support for this
-  //  method lands
-  // if (!Obj->isRelocatableObject())
-  //  fatal(toString(this) + ": not a relocatable wasm file");
+    fatal(toString(this) + ": not a wasm file");
+  if (!Obj->isRelocatableObject())
+    fatal(toString(this) + ": not a relocatable wasm file");
 
   Bin.release();
   WasmObj.reset(Obj);
 
+  // Find the code and data sections.  Wasm objects can have at most one code
+  // and one data section.
   for (const SectionRef &Sec : WasmObj->sections()) {
     const WasmSection &Section = WasmObj->getWasmSection(Sec);
     if (Section.Type == WASM_SEC_CODE)
@@ -154,8 +153,7 @@ void ObjectFile::parse() {
 }
 
 void ObjectFile::initializeSymbols() {
-  uint32_t NumSymbols = WasmObj->getNumberOfSymbols();
-  Symbols.reserve(NumSymbols);
+  Symbols.reserve(WasmObj->getNumberOfSymbols());
 
   for (const WasmImport &Import : WasmObj->imports()) {
     switch (Import.Kind) {
@@ -172,8 +170,6 @@ void ObjectFile::initializeSymbols() {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
     switch (WasmSym.Type) {
     case WasmSymbol::SymbolType::FUNCTION_IMPORT:
-      createUndefined(WasmSym);
-      break;
     case WasmSymbol::SymbolType::GLOBAL_IMPORT:
       createUndefined(WasmSym);
       break;

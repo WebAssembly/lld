@@ -16,6 +16,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include <mutex>
 
+#ifdef HAVE_UNISTD_H
+#error
+#endif
+
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
 #include <unistd.h>
 #endif

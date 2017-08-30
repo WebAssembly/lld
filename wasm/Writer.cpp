@@ -17,6 +17,7 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/FileOutputBuffer.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LEB128.h"
 
@@ -29,7 +30,8 @@ using namespace llvm::wasm;
 using namespace lld;
 using namespace lld::wasm;
 
-struct OutputRelocation : public WasmRelocation {
+struct OutputRelocation {
+  WasmRelocation Reloc;
   uint32_t NewIndex;
   int64_t Value;
 };
@@ -83,55 +85,42 @@ struct WasmSignatureDenseMapInfo {
   }
 };
 
-static void debugWrite(raw_ostream &OS, const char *msg,
-                        const char *fmt = NULL, ...) {
-  DEBUG(
-    fprintf(stderr, "  | %08" PRIx64 ": %s", OS.tell(), msg);
-    if (fmt) {
-      fprintf(stderr, " [");
-      va_list ap;
-      va_start(ap, fmt);
-      vfprintf(stderr, fmt, ap);
-      va_end(ap);
-      fprintf(stderr, "]");
-    }
-    fprintf(stderr, "\n");
-  );
+static void debugWrite(uint64_t offset, Twine msg) {
+  DEBUG(dbgs() << format("  | %08" PRIx64 ": ", offset) << msg << "\n");
 }
 
-static void write_uleb128(raw_ostream &OS, uint32_t Number, const char *msg) {
+static void writeUleb128(raw_ostream &OS, uint32_t Number, const char *msg) {
   if (msg)
-    debugWrite(OS, msg, "%x", Number);
+    debugWrite(OS.tell(), msg + formatv(" [{0:x}]", Number));
   encodeULEB128(Number, OS);
 }
 
-static void write_sleb128(raw_ostream &OS, int32_t Number, const char *msg) {
+static void writeSleb128(raw_ostream &OS, int32_t Number, const char *msg) {
   if (msg)
-    debugWrite(OS, msg, "%x", Number);
+    debugWrite(OS.tell(), msg + formatv(" [{0:x}]", Number));
   encodeSLEB128(Number, OS);
 }
 
-static void write_bytes(raw_ostream &OS, const char *bytes, size_t count,
+static void writeBytes(raw_ostream &OS, const char *bytes, size_t count,
                         const char *msg = nullptr) {
   if (msg)
-    debugWrite(OS, msg);
+    debugWrite(OS.tell(), msg);
   OS.write(bytes, count);
 }
 
-static void write_data(raw_ostream &OS, const StringRef String,
+static void writeData(raw_ostream &OS, const StringRef String,
                        const char *msg = nullptr) {
   if (msg)
-    debugWrite(OS, msg, "data[%d]", String.size());
-  write_bytes(OS, String.data(), String.size());
+    debugWrite(OS.tell(), msg + formatv(" [data[{0}]]", String.size()));
+  writeBytes(OS, String.data(), String.size());
 }
 
-static void write_str(raw_ostream &OS, const StringRef String,
+static void writeStr(raw_ostream &OS, const StringRef String,
                       const char *msg = nullptr) {
   if (msg)
-    debugWrite(OS, msg, "str[%d]: %.*s", String.size(), String.size(),
-               String.data());
-  write_uleb128(OS, String.size(), nullptr);
-  write_bytes(OS, String.data(), String.size());
+    debugWrite(OS.tell(), msg + formatv(" [str[{0}]: {1}]", String.size(), String));
+  writeUleb128(OS, String.size(), nullptr);
+  writeBytes(OS, String.data(), String.size());
 }
 
 static const char *sectionTypeToString(uint32_t SectionType) {
@@ -183,9 +172,10 @@ public:
 
   void createHeader(size_t BodySize) {
     raw_string_ostream OS(Header);
-    debugWrite(OS, "section type", "%s", sectionTypeToString(Type));
-    write_uleb128(OS, Type, nullptr);
-    write_uleb128(OS, BodySize, "section size");
+    debugWrite(OS.tell(),
+               "section type " + formatv("[{0}]", sectionTypeToString(Type)));
+    writeUleb128(OS, Type, nullptr);
+    writeUleb128(OS, BodySize, "section size");
     OS.flush();
     log("createHeader: " + toString(this) + " body=" + Twine(BodySize) +
         " total=" + Twine(getSize()));
@@ -209,7 +199,7 @@ public:
   SyntheticSection(uint32_t Type, std::string Name = "")
       : OutputSection(Type, Name), BodyOutputStream(Body) {
     if (!Name.empty())
-      write_str(BodyOutputStream, Name);
+      writeStr(BodyOutputStream, Name);
   }
 
   void writeTo(uint8_t *Ptr) override {
@@ -241,8 +231,8 @@ public:
   explicit SubSection(uint32_t Type) : SyntheticSection(Type) {}
 
   void writeToStream(raw_ostream &OS) {
-    write_data(OS, Header);
-    write_data(OS, Body);
+    writeData(OS, Header);
+    writeData(OS, Body);
   }
 };
 
@@ -252,7 +242,7 @@ public:
       : OutputSection(WASM_SEC_CODE), InputObjects(Objs), BodySize(0) {
 
     raw_string_ostream OS(CodeSectionHeader);
-    write_uleb128(OS, TotalFunctions, "function count");
+    writeUleb128(OS, TotalFunctions, "function count");
     OS.flush();
     BodySize = CodeSectionHeader.size();
 
@@ -335,7 +325,7 @@ public:
       : OutputSection(WASM_SEC_DATA), InputObjects(Objs), BodySize(0) {
 
     raw_string_ostream OS(DataSectionHeader);
-    write_uleb128(OS, TotalDataSegments, "data segment count");
+    writeUleb128(OS, TotalDataSegments, "data segment count");
     OS.flush();
     BodySize = DataSectionHeader.size();
 
@@ -351,12 +341,12 @@ public:
            File->getWasmObj()->dataSegments()) {
         std::string SegmentHeader;
         raw_string_ostream OS(SegmentHeader);
-        write_uleb128(OS, Segment.Data.MemoryIndex, "memory index");
-        write_uleb128(OS, WASM_OPCODE_I32_CONST, "opcode:i32const");
+        writeUleb128(OS, Segment.Data.MemoryIndex, "memory index");
+        writeUleb128(OS, WASM_OPCODE_I32_CONST, "opcode:i32const");
         uint32_t NewOffset = Segment.Data.Offset.Value.Int32 + File->DataOffset;
-        write_sleb128(OS, NewOffset, "memory offset");
-        write_uleb128(OS, WASM_OPCODE_END, "opcode:end");
-        write_uleb128(OS, Segment.Data.Content.size(), "segment size");
+        writeSleb128(OS, NewOffset, "memory offset");
+        writeUleb128(OS, WASM_OPCODE_END, "opcode:end");
+        writeUleb128(OS, Segment.Data.Content.size(), "segment size");
         OS.flush();
         BodySize += SegmentHeader.size();
 
@@ -404,7 +394,6 @@ public:
     }
 
     applyRelocations(ContentsStart, Relocations, 0);
-    // Segment.SectionOffset);
   }
 
 protected:
@@ -428,7 +417,7 @@ std::string toString(OutputSection *Section) {
 // The writer writes a SymbolTable result to a file.
 class Writer {
 public:
-  Writer(SymbolTable *T) : Symtab(T) {}
+  Writer() = default;
   void run();
 
 private:
@@ -477,7 +466,6 @@ private:
   uint32_t TotalDataSegments = 0;
   uint32_t InitialTableOffset = 0;
 
-  SymbolTable *Symtab;
   std::vector<const WasmSignature *> Types;
   DenseMap<WasmSignature, int32_t, WasmSignatureDenseMapInfo> TypeIndices;
   std::vector<Symbol *> FunctionImports;
@@ -528,80 +516,80 @@ static const char *value_type_to_str(int32_t Type) {
   }
 }
 
-static void write_u8(raw_ostream &OS, uint8_t byte, const char *msg) {
+static void writeU8(raw_ostream &OS, uint8_t byte, const char *msg) {
   OS << byte;
 }
 
-static void write_u32(raw_ostream &OS, uint32_t Number, const char *msg) {
-  debugWrite(OS, msg, "%x", Number);
+static void writeU32(raw_ostream &OS, uint32_t Number, const char *msg) {
+  debugWrite(OS.tell(), msg + formatv("[{0:x}]", Number));
   support::endian::Writer<support::little>(OS).write(Number);
 }
 
-static void write_value_type(raw_ostream &OS, int32_t Type, const char *msg) {
-  debugWrite(OS, msg, "type: %s", value_type_to_str(Type));
-  write_sleb128(OS, Type, nullptr);
+static void writeValueType(raw_ostream &OS, int32_t Type, const char *msg) {
+  debugWrite(OS.tell(), msg + formatv("[type: {0}]", value_type_to_str(Type)));
+  writeSleb128(OS, Type, nullptr);
 }
 
-static void write_sig(raw_ostream &OS, const WasmSignature &Sig) {
-  write_sleb128(OS, WASM_TYPE_FUNC, "signature type");
-  write_uleb128(OS, Sig.ParamTypes.size(), "param count");
+static void writeSig(raw_ostream &OS, const WasmSignature &Sig) {
+  writeSleb128(OS, WASM_TYPE_FUNC, "signature type");
+  writeUleb128(OS, Sig.ParamTypes.size(), "param count");
   for (int32_t ParamType : Sig.ParamTypes) {
-    write_value_type(OS, ParamType, "param type");
+    writeValueType(OS, ParamType, "param type");
   }
   if (Sig.ReturnType == WASM_TYPE_NORESULT) {
-    write_uleb128(OS, 0, "result count");
+    writeUleb128(OS, 0, "result count");
   } else {
-    write_uleb128(OS, 1, "result count");
-    write_value_type(OS, Sig.ReturnType, "result type");
+    writeUleb128(OS, 1, "result count");
+    writeValueType(OS, Sig.ReturnType, "result type");
   }
 }
 
-static void write_init_expr(raw_ostream &OS, const WasmInitExpr &InitExpr) {
-  write_u8(OS, InitExpr.Opcode, "opcode");
+static void writeInitExpr(raw_ostream &OS, const WasmInitExpr &InitExpr) {
+  writeU8(OS, InitExpr.Opcode, "opcode");
   switch (InitExpr.Opcode) {
   case WASM_OPCODE_I32_CONST:
-    write_sleb128(OS, InitExpr.Value.Int32, "literal (i32)");
+    writeSleb128(OS, InitExpr.Value.Int32, "literal (i32)");
     break;
   case WASM_OPCODE_I64_CONST:
-    write_sleb128(OS, InitExpr.Value.Int64, "literal (i64)");
+    writeSleb128(OS, InitExpr.Value.Int64, "literal (i64)");
     break;
   case WASM_OPCODE_GET_GLOBAL:
-    write_uleb128(OS, InitExpr.Value.Global, "literal (global index)");
+    writeUleb128(OS, InitExpr.Value.Global, "literal (global index)");
     break;
   default:
     fatal("unknown opcode in init expr: " + Twine(InitExpr.Opcode));
     break;
   }
-  write_u8(OS, WASM_OPCODE_END, "opcode:end");
+  writeU8(OS, WASM_OPCODE_END, "opcode:end");
 }
 
-static void write_limits(raw_ostream &OS, const WasmLimits &Limits) {
-  write_uleb128(OS, Limits.Flags, "limits flags");
-  write_uleb128(OS, Limits.Initial, "limits initial");
+static void writeLimits(raw_ostream &OS, const WasmLimits &Limits) {
+  writeUleb128(OS, Limits.Flags, "limits flags");
+  writeUleb128(OS, Limits.Initial, "limits initial");
   if (Limits.Flags & WASM_LIMITS_FLAG_HAS_MAX)
-    write_uleb128(OS, Limits.Maximum, "limits max");
+    writeUleb128(OS, Limits.Maximum, "limits max");
 }
 
-static void write_global(raw_ostream &OS, const WasmGlobal &Global) {
-  write_value_type(OS, Global.Type, "global type");
-  write_uleb128(OS, Global.Mutable, "global mutable");
-  write_init_expr(OS, Global.InitExpr);
+static void writeGlobal(raw_ostream &OS, const WasmGlobal &Global) {
+  writeValueType(OS, Global.Type, "global type");
+  writeUleb128(OS, Global.Mutable, "global mutable");
+  writeInitExpr(OS, Global.InitExpr);
 }
 
-static void write_import(raw_ostream &OS, const WasmImport &Import) {
-  write_str(OS, Import.Module, "import module name");
-  write_str(OS, Import.Field, "import field name");
-  write_u8(OS, Import.Kind, "import kind");
+static void writeImport(raw_ostream &OS, const WasmImport &Import) {
+  writeStr(OS, Import.Module, "import module name");
+  writeStr(OS, Import.Field, "import field name");
+  writeU8(OS, Import.Kind, "import kind");
   switch (Import.Kind) {
   case WASM_EXTERNAL_FUNCTION:
-    write_uleb128(OS, Import.SigIndex, "import sig index");
+    writeUleb128(OS, Import.SigIndex, "import sig index");
     break;
   case WASM_EXTERNAL_GLOBAL:
-    write_value_type(OS, Import.Global.Type, "import global type");
-    write_uleb128(OS, Import.Global.Mutable, "import global mutable");
+    writeValueType(OS, Import.Global.Type, "import global type");
+    writeUleb128(OS, Import.Global.Mutable, "import global mutable");
     break;
   case WASM_EXTERNAL_MEMORY:
-    write_limits(OS, Import.Memory);
+    writeLimits(OS, Import.Memory);
     break;
   default:
     fatal("unsupported import type: " + Twine(Import.Kind));
@@ -609,18 +597,18 @@ static void write_import(raw_ostream &OS, const WasmImport &Import) {
   }
 }
 
-static void write_export(raw_ostream &OS, const WasmExport &Export) {
-  write_str(OS, Export.Name, "export name");
-  write_u8(OS, Export.Kind, "export kind");
+static void writeExport(raw_ostream &OS, const WasmExport &Export) {
+  writeStr(OS, Export.Name, "export name");
+  writeU8(OS, Export.Kind, "export kind");
   switch (Export.Kind) {
   case WASM_EXTERNAL_FUNCTION:
-    write_uleb128(OS, Export.Index, "function index");
+    writeUleb128(OS, Export.Index, "function index");
     break;
   case WASM_EXTERNAL_GLOBAL:
-    write_uleb128(OS, Export.Index, "global index");
+    writeUleb128(OS, Export.Index, "global index");
     break;
   case WASM_EXTERNAL_MEMORY:
-    write_uleb128(OS, Export.Index, "memory index");
+    writeUleb128(OS, Export.Index, "memory index");
     break;
   default:
     fatal("unsupported export type: " + Twine(Export.Kind));
@@ -628,16 +616,16 @@ static void write_export(raw_ostream &OS, const WasmExport &Export) {
   }
 }
 
-static void write_reloc(raw_ostream &OS, const OutputRelocation &Reloc) {
-  write_uleb128(OS, Reloc.Type, "reloc type");
-  write_uleb128(OS, Reloc.Offset, "reloc offset");
-  write_uleb128(OS, Reloc.NewIndex, "reloc index");
+static void writeReloc(raw_ostream &OS, const OutputRelocation &Reloc) {
+  writeUleb128(OS, Reloc.Reloc.Type, "reloc type");
+  writeUleb128(OS, Reloc.Reloc.Offset, "reloc offset");
+  writeUleb128(OS, Reloc.NewIndex, "reloc index");
 
-  switch (Reloc.Type) {
+  switch (Reloc.Reloc.Type) {
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    write_uleb128(OS, Reloc.Addend, "reloc addend");
+    writeUleb128(OS, Reloc.Reloc.Addend, "reloc addend");
     break;
   default:
     break;
@@ -655,7 +643,7 @@ void Writer::createImportSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_IMPORT);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, TotalImports, "import count");
+  writeUleb128(OS, TotalImports, "import count");
 
   for (Symbol *Sym : FunctionImports) {
     WasmImport Import;
@@ -665,7 +653,7 @@ void Writer::createImportSection() {
     assert(isa<ObjectFile>(Sym->getFile()));
     ObjectFile *Obj = dyn_cast<ObjectFile>(Sym->getFile());
     Import.SigIndex = Obj->relocateTypeIndex(Sym->getFunctionTypeIndex());
-    write_import(OS, Import);
+    writeImport(OS, Import);
   }
 
   if (Config->ImportMemory) {
@@ -675,7 +663,7 @@ void Writer::createImportSection() {
     Import.Kind = WASM_EXTERNAL_MEMORY;
     Import.Memory.Flags = 0;
     Import.Memory.Initial = TotalMemoryPages;
-    write_import(OS, Import);
+    writeImport(OS, Import);
   }
 
   for (Symbol *Sym : GlobalImports) {
@@ -688,16 +676,16 @@ void Writer::createImportSection() {
     // TODO(sbc): Set type of this import
     // ObjectFile* Obj = dyn_cast<ObjectFile>(Sym->getFile());
     Import.Global.Type = WASM_TYPE_I32; // Sym->getGlobalType();
-    write_import(OS, Import);
+    writeImport(OS, Import);
   }
 }
 
 void Writer::createTypeSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_TYPE);
   raw_ostream &OS = Section->getStream();
-  write_uleb128(OS, Types.size(), "type count");
+  writeUleb128(OS, Types.size(), "type count");
   for (const WasmSignature *Sig : Types) {
-    write_sig(OS, *Sig);
+    writeSig(OS, *Sig);
   }
 }
 
@@ -708,10 +696,10 @@ void Writer::createFunctionSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_FUNCTION);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, TotalFunctions, "function count");
+  writeUleb128(OS, TotalFunctions, "function count");
   for (ObjectFile *File : Symtab->ObjectFiles) {
     for (uint32_t Sig : File->getWasmObj()->functionTypes()) {
-      write_uleb128(OS, File->relocateTypeIndex(Sig), "sig index");
+      writeUleb128(OS, File->relocateTypeIndex(Sig), "sig index");
     }
   }
 }
@@ -723,19 +711,19 @@ void Writer::createMemorySection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_MEMORY);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, 1, "memory count");
-  write_uleb128(OS, 0, "memory limits flags");
-  write_uleb128(OS, TotalMemoryPages, "initial pages");
+  writeUleb128(OS, 1, "memory count");
+  writeUleb128(OS, 0, "memory limits flags");
+  writeUleb128(OS, TotalMemoryPages, "initial pages");
 }
 
 void Writer::createGlobalSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_GLOBAL);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, TotalGlobals, "global count");
+  writeUleb128(OS, TotalGlobals, "global count");
   for (auto &Pair : Config->SyntheticGlobals) {
     WasmGlobal &Global = Pair.second;
-    write_global(OS, Global);
+    writeGlobal(OS, Global);
   }
 
   if (Config->Relocatable) {
@@ -750,7 +738,7 @@ void Writer::createGlobalSection() {
                 Twine(Global.InitExpr.Opcode));
         RelocatedGlobal.InitExpr.Value.Int32 =
             File->getGlobalAddress(GlobalIndex);
-        write_global(OS, RelocatedGlobal);
+        writeGlobal(OS, RelocatedGlobal);
         GlobalIndex++;
       }
     }
@@ -761,11 +749,11 @@ void Writer::createTableSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_TABLE);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, 1, "table count");
-  write_sleb128(OS, WASM_TYPE_ANYFUNC, "table type");
-  write_uleb128(OS, WASM_LIMITS_FLAG_HAS_MAX, "table flags");
-  write_uleb128(OS, TotalTableLength, "table initial size");
-  write_uleb128(OS, TotalTableLength, "table max size");
+  writeUleb128(OS, 1, "table count");
+  writeSleb128(OS, WASM_TYPE_ANYFUNC, "table type");
+  writeUleb128(OS, WASM_LIMITS_FLAG_HAS_MAX, "table flags");
+  writeUleb128(OS, TotalTableLength, "table initial size");
+  writeUleb128(OS, TotalTableLength, "table max size");
 }
 
 void Writer::createExportSection() {
@@ -802,14 +790,14 @@ void Writer::createExportSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_EXPORT);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, NumExports, "export count");
+  writeUleb128(OS, NumExports, "export count");
 
   if (ExportMemory) {
     WasmExport MemoryExport;
     MemoryExport.Name = "memory";
     MemoryExport.Kind = WASM_EXTERNAL_MEMORY;
     MemoryExport.Index = 0;
-    write_export(OS, MemoryExport);
+    writeExport(OS, MemoryExport);
   }
 
   if (ExportMain) {
@@ -827,7 +815,7 @@ void Writer::createExportSection() {
       MainExport.Name = Config->ExportEntryAs;
       MainExport.Kind = WASM_EXTERNAL_FUNCTION;
       MainExport.Index = Sym->getOutputIndex();
-      write_export(OS, MainExport);
+      writeExport(OS, MainExport);
     }
   }
 
@@ -845,7 +833,7 @@ void Writer::createExportSection() {
           Export.Kind = WASM_EXTERNAL_FUNCTION;
         else
           Export.Kind = WASM_EXTERNAL_GLOBAL;
-        write_export(OS, Export);
+        writeExport(OS, Export);
       }
     }
 
@@ -863,18 +851,18 @@ void Writer::createElemSection() {
   SyntheticSection *Section = createSyntheticSection(WASM_SEC_ELEM);
   raw_ostream &OS = Section->getStream();
 
-  write_uleb128(OS, 1, "segment count");
-  write_uleb128(OS, 0, "table index");
+  writeUleb128(OS, 1, "segment count");
+  writeUleb128(OS, 0, "table index");
   WasmInitExpr InitExpr;
   InitExpr.Opcode = WASM_OPCODE_I32_CONST;
   InitExpr.Value.Int32 = InitialTableOffset;
-  write_init_expr(OS, InitExpr);
-  write_uleb128(OS, TotalElements, "elem count");
+  writeInitExpr(OS, InitExpr);
+  writeUleb128(OS, TotalElements, "elem count");
 
   for (ObjectFile *File : Symtab->ObjectFiles) {
     for (const WasmElemSegment &Segment : File->getWasmObj()->elements()) {
       for (uint64_t FunctionIndex : Segment.Functions) {
-        write_uleb128(OS, File->relocateFunctionIndex(FunctionIndex),
+        writeUleb128(OS, File->relocateFunctionIndex(FunctionIndex),
                       "function index");
       }
     }
@@ -909,20 +897,20 @@ static uint32_t calcNewIndex(const ObjectFile &File,
 }
 
 static void writeRelocValue(const OutputRelocation &Reloc, uint8_t *Location) {
-  DEBUG(dbgs() << "write reloc: type=" << Reloc.Type << " index=" << Reloc.Index
-               << " new=" << Reloc.NewIndex << " offset=" << Reloc.Offset
-               << "\n");
+  DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
+               << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
+               << " offset=" << Reloc.Reloc.Offset << "\n");
   RelocEncoding Encoding;
-  switch (Reloc.Type) {
+  switch (Reloc.Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
-    assert(decodeULEB128(Location) == Reloc.Index);
+    assert(decodeULEB128(Location) == Reloc.Reloc.Index);
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
     Encoding = RelocEncoding::Uleb128;
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-    assert(decodeSLEB128(Location) == Reloc.Index);
+    assert(decodeSLEB128(Location) == Reloc.Reloc.Index);
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
     Encoding = RelocEncoding::Sleb128;
     break;
@@ -963,14 +951,12 @@ static void calcRelocations(const ObjectFile &File,
         continue;
     }
     OutputRelocation NewReloc;
-    NewReloc.Type = Reloc.Type;
-    NewReloc.Index = Reloc.Index;
-    NewReloc.Offset = Reloc.Offset + OutputOffset;
-    NewReloc.Addend = Reloc.Addend;
+    NewReloc.Reloc = Reloc;
+    NewReloc.Reloc.Offset += OutputOffset;
     NewReloc.NewIndex = NewIndex;
     DEBUG(dbgs() << "reloc: type=" << Reloc.Type << " index=" << Reloc.Index
                  << " offset=" << Reloc.Offset << " new=" << NewIndex
-                 << " newOffset=" << NewReloc.Offset << "\n");
+                 << " newOffset=" << NewReloc.Reloc.Offset << "\n");
 
     switch (Reloc.Type) {
     case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
@@ -992,7 +978,7 @@ static void applyRelocations(uint8_t *Data,
   log("applyRelocations: offset=" + Twine(Offset) +
       " count=" + Twine(Relocs.size()));
   for (const OutputRelocation &Reloc : Relocs) {
-    uint8_t *Location = Data + Reloc.Offset - Offset;
+    uint8_t *Location = Data + Reloc.Reloc.Offset - Offset;
     writeRelocValue(Reloc, Location);
   }
 }
@@ -1029,10 +1015,10 @@ void Writer::createRelocSections() {
     }
     SyntheticSection *Section = createSyntheticSection(WASM_SEC_CUSTOM, name);
     raw_ostream &OS = Section->getStream();
-    write_uleb128(OS, S->Type, "reloc section");
-    write_uleb128(OS, S->Relocations.size(), "reloc section");
+    writeUleb128(OS, S->Type, "reloc section");
+    writeUleb128(OS, S->Relocations.size(), "reloc section");
     for (const OutputRelocation &Reloc : S->Relocations)
-      write_reloc(OS, Reloc);
+      writeReloc(OS, Reloc);
   }
 }
 
@@ -1042,13 +1028,13 @@ void Writer::createLinkingSection() {
   raw_ostream &OS = Section->getStream();
 
   SubSection DataSizeSubSection(WASM_DATA_SIZE);
-  write_uleb128(DataSizeSubSection.getStream(), DataSize, "data size");
+  writeUleb128(DataSizeSubSection.getStream(), DataSize, "data size");
   DataSizeSubSection.finalizeContents();
   DataSizeSubSection.writeToStream(OS);
 
   if (Config->Relocatable) {
     SubSection DataAlignSubSection(WASM_DATA_ALIGNMENT);
-    write_uleb128(DataAlignSubSection.getStream(), DataAlignment, "data align");
+    writeUleb128(DataAlignSubSection.getStream(), DataAlignment, "data align");
     DataAlignSubSection.finalizeContents();
     DataAlignSubSection.writeToStream(OS);
   }
@@ -1079,7 +1065,7 @@ void Writer::createNameSection() {
 
   SubSection FunctionSubsection(WASM_NAMES_FUNCTION);
   raw_ostream &OS = FunctionSubsection.getStream();
-  write_uleb128(OS, FunctionNameCount, "name count");
+  writeUleb128(OS, FunctionNameCount, "name count");
 
   // We have to iterate through the inputs twice so that all the imports
   // appear first before any of the local function names.
@@ -1104,9 +1090,9 @@ void Writer::createNameSection() {
         Expected<StringRef> NameOrError = Sym.getName();
         if (!NameOrError)
           fatal("error getting symbol name");
-        write_uleb128(OS, File->relocateFunctionIndex(Sym.getValue()),
+        writeUleb128(OS, File->relocateFunctionIndex(Sym.getValue()),
                       "func index");
-        write_str(OS, *NameOrError, "symbol name");
+        writeStr(OS, *NameOrError, "symbol name");
       }
     }
   }
@@ -1383,8 +1369,8 @@ void Writer::openFile() {
 
 void Writer::createHeader() {
   raw_string_ostream OS(Header);
-  write_bytes(OS, WasmMagic, sizeof(WasmMagic), "wasm magic");
-  write_u32(OS, WasmVersion, "wasm version");
+  writeBytes(OS, WasmMagic, sizeof(WasmMagic), "wasm magic");
+  writeU32(OS, WasmVersion, "wasm version");
   OS.flush();
   FileSize += Header.size();
 }
@@ -1392,7 +1378,7 @@ void Writer::createHeader() {
 namespace lld {
 namespace wasm {
 
-void writeResult(SymbolTable *T) { Writer(T).run(); }
+void writeResult() { Writer().run(); }
 
 } // namespace wasm
 } // namespace lld

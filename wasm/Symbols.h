@@ -27,7 +27,7 @@ class InputFile;
 class Symbol {
 public:
   enum Kind {
-    DefinedFunctionKind = 0,
+    DefinedFunctionKind,
     DefinedGlobalKind,
 
     LazyKind,
@@ -46,7 +46,10 @@ public:
 
   bool isLazy() const { return SymbolKind == LazyKind; }
   bool isDefined() const { return SymbolKind <= LastDefinedKind; }
-  bool isUndefined() const { return !isDefined(); }
+  bool isUndefined() const {
+    return SymbolKind == UndefinedGlobalKind ||
+           SymbolKind == UndefinedFunctionKind;
+  }
   bool isFunction() const {
     return SymbolKind == DefinedFunctionKind ||
            SymbolKind == UndefinedFunctionKind;
@@ -55,23 +58,26 @@ public:
   bool isWeak() const;
 
   // Returns the symbol name.
-  StringRef getName() const;
+  StringRef getName() const { return Name; }
 
   // Returns the file from which this symbol was created.
-  InputFile *getFile() const;
+  InputFile *getFile() const { return File; }
 
   uint32_t getGlobalIndex() const;
   uint32_t getFunctionIndex() const;
   uint32_t getFunctionTypeIndex() const;
   uint32_t getOutputIndex() const;
 
-  bool hasOutputIndex() { return OutputIndexSet; }
+  bool hasOutputIndex() { return OutputIndex.hasValue(); }
 
-  void setOutputIndex(uint32_t Index);
+  void setOutputIndex(uint32_t Index) {
+    assert(!hasOutputIndex());
+    OutputIndex = Index;
+  }
 
   void update(Kind K, InputFile *F = nullptr, const WasmSymbol *Sym = nullptr);
 
-  void setArchiveSymbol(const Archive::Symbol &Sym);
+  void setArchiveSymbol(const Archive::Symbol &Sym) { ArchiveSymbol = Sym; }
   const Archive::Symbol &getArchiveSymbol() { return ArchiveSymbol; }
 
   // This bit is used by Writer::writeNameSection() to prevent
@@ -88,8 +94,7 @@ protected:
   Kind SymbolKind = InvalidKind;
   InputFile *File = nullptr;
   const WasmSymbol *Sym = nullptr;
-  uint32_t OutputIndex = 0;
-  bool OutputIndexSet = false;
+  llvm::Optional<uint32_t> OutputIndex;
 };
 
 } // namespace wasm

@@ -21,14 +21,6 @@ using namespace llvm;
 namespace lld {
 namespace wasm {
 
-StringRef Symbol::getName() const { return Name; }
-
-InputFile *Symbol::getFile() const { return File; }
-
-void Symbol::setArchiveSymbol(const Archive::Symbol &Sym) {
-  ArchiveSymbol = Sym;
-}
-
 uint32_t Symbol::getGlobalIndex() const {
   const WasmExport &Export = getExport();
   assert(Export.Kind == llvm::wasm::WASM_EXTERNAL_GLOBAL);
@@ -68,19 +60,9 @@ const WasmExport &Symbol::getExport() const {
 }
 
 uint32_t Symbol::getOutputIndex() const {
-  if (isUndefined() && isWeak()) {
+  if (isUndefined() && isWeak())
     return 0;
-  }
-  assert(OutputIndexSet);
-  return OutputIndex;
-}
-
-void Symbol::setOutputIndex(uint32_t Index) {
-  assert(!OutputIndexSet);
-  DEBUG(dbgs() << "setOutputIndex: " << Index << ": " << Name
-               << " kind=" << toString(SymbolKind) << "\n");
-  OutputIndex = Index;
-  OutputIndexSet = true;
+  return OutputIndex.getValue();
 }
 
 void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym) {

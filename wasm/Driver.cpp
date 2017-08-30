@@ -331,7 +331,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   }
 
   // Write the result to the file.
-  writeResult(Symtab);
+  writeResult();
 }
 
 } // namespace wasm

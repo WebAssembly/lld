@@ -33,7 +33,7 @@ struct SectionBookkeeping {
   uint64_t ContentsOffset;
 };
 
-void writeResult(SymbolTable *T);
+void writeResult();
 
 } // namespace wasm
 } // namespace lld

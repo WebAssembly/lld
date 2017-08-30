@@ -13,7 +13,8 @@
 #include "Error.h"
 #include "Memory.h"
 #include "Strings.h"
-#include "llvm/ADT/SmallPtrSet.h"
+
+#include <unordered_set>
 
 #define DEBUG_TYPE "lld"
 
@@ -33,10 +34,10 @@ void SymbolTable::addFile(InputFile *File) {
 }
 
 void SymbolTable::reportRemainingUndefines() {
-  SmallPtrSet<Symbol *, 8> Undefs;
+  std::unordered_set<Symbol *> Undefs;
   for (auto &I : Symtab) {
     Symbol *Sym = I.second;
-    if (Sym->isUndefined() && !Sym->isLazy() && !Sym->isWeak() &&
+    if (Sym->isUndefined() && !Sym->isWeak() &&
         Config->AllowUndefinedSymbols.count(Sym->getName()) == 0) {
       Undefs.insert(Sym);
     }
@@ -71,25 +72,28 @@ std::pair<Symbol *, bool> SymbolTable::insert(StringRef Name) {
 }
 
 void SymbolTable::reportDuplicate(Symbol *Existing, InputFile *NewFile) {
-  error("duplicate symbol: " + toString(*Existing) + " in " +
-        toString(Existing->getFile()) + " and in " +
-        (NewFile ? toString(NewFile) : "(internal)"));
+  error("duplicate symbol: " + toString(*Existing) + "\n>>> defined in " +
+        toString(Existing->getFile()) + "\n>>> defined in " + 
+        (NewFile ? toString(NewFile) : "<internal>"));
 }
 
 static void checkSymbolTypes(Symbol *Existing, InputFile *F,
                              const WasmSymbol *New) {
   if (Existing->isLazy())
     return;
+
   bool NewIsFunction = New->Type == WasmSymbol::SymbolType::FUNCTION_EXPORT ||
                        New->Type == WasmSymbol::SymbolType::FUNCTION_IMPORT;
-  if (Existing->isFunction() != NewIsFunction) {
-    error("symbol type mismatch: " + New->Name);
-    StringRef Filename = "<builtin>";
-    if (Existing->getFile())
-      Filename = Existing->getFile()->getName();
-    error(Filename + ": " + (Existing->isFunction() ? "Function" : "Global"));
-    error(F->getName() + ": " + (NewIsFunction ? "Function" : "Global"));
-  }
+  if (Existing->isFunction() == NewIsFunction)
+    return;
+
+  std::string Filename = "<builtin>";
+  if (Existing->getFile())
+    Filename = toString(Existing->getFile());
+  error("symbol type mismatch: " + New->Name + "\n>>> defined as " +
+        (Existing->isFunction() ? "Function" : "Global") + " in " + Filename +
+        "\n>>> defined as " +
+        (NewIsFunction ? "Function" : "Global")  + " in " + F->getName());
 }
 
 Symbol *SymbolTable::addDefinedGlobal(StringRef Name) {
@@ -116,26 +120,23 @@ Symbol *SymbolTable::addDefined(InputFile *F, const WasmSymbol *Sym) {
   if (WasInserted) {
     S->update(Kind, F, Sym);
   } else if (!S->isDefined()) {
-    // The existing symbol table entry in undefined. The new symbol replaces
+    // The existing symbol table entry is undefined. The new symbol replaces
     // it
     DEBUG(dbgs() << "resolving existing undefined symbol: " << Sym->Name
                  << "\n");
     checkSymbolTypes(S, F, Sym);
     S->update(Kind, F, Sym);
+  } else if (Sym->isWeak()) {
+    // the new symbol is weak we can ignore it
+    DEBUG(dbgs() << "existing symbol takes precensence\n");
+  } else if (S->isWeak()) {
+    // the new symbol is not weak and the existing symbol is, so we replace
+    // it
+    DEBUG(dbgs() << "replacing existing weak symbol\n");
+    S->update(Kind, F, Sym);
   } else {
-    // The existing symbol is defined.
-    if (Sym->isWeak()) {
-      // the new symbol is weak we can ignore it
-      DEBUG(dbgs() << "existing symbol takes precensence\n");
-    } else if (S->isWeak()) {
-      // the new symbol is not weak and the existing symbol is, so we replace
-      // it
-      DEBUG(dbgs() << "replacing existing weak symbol\n");
-      S->update(Kind, F, Sym);
-    } else {
-      // niether symbol is week. They conflict.
-      reportDuplicate(S, F);
-    }
+    // niether symbol is week. They conflict.
+    reportDuplicate(S, F);
   }
   return S;
 }
@@ -181,7 +182,7 @@ void SymbolTable::addLazy(ArchiveFile *F, const Archive::Symbol *Sym) {
   if (WasInserted) {
     S->update(Symbol::LazyKind, F);
     S->setArchiveSymbol(*Sym);
-  } else if (S->isUndefined() && !S->isLazy()) {
+  } else if (S->isUndefined()) {
     // There is an existing undefined symbol.  The can load from the
     // archive.
     DEBUG(dbgs() << "replacing existing undefined\n");
