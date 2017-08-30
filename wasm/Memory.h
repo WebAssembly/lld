@@ -46,7 +46,7 @@ inline void freeArena() {
     Alloc->reset();
   BAlloc.Reset();
 }
-}
-}
+} // namespace wasm
+} // namespace lld
 
 #endif

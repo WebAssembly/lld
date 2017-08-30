@@ -118,7 +118,7 @@ uint32_t ObjectFile::relocateTableIndex(uint32_t original) const {
 uint32_t ObjectFile::relocateGlobalIndex(uint32_t original) const {
   if (isImportedGlobal(original)) {
     StringRef Name = GlobalImports[original];
-    Symbol* Sym = Symtab->find(Name);
+    Symbol *Sym = Symtab->find(Name);
     assert(Sym && "imported symbol not found in symbol table");
     return Sym->getOutputIndex();
   }
@@ -136,13 +136,13 @@ void ObjectFile::parse() {
     fatal(toString(this) + " is not a wasm file");
   // TODO(sbc): Enable this change once the llvm support for this
   //  method lands
-  //if (!Obj->isRelocatableObject())
+  // if (!Obj->isRelocatableObject())
   //  fatal(toString(this) + ": not a relocatable wasm file");
 
   Bin.release();
   WasmObj.reset(Obj);
 
-  for (const SectionRef &Sec: WasmObj->sections()) {
+  for (const SectionRef &Sec : WasmObj->sections()) {
     const WasmSection &Section = WasmObj->getWasmSection(Sec);
     if (Section.Type == WASM_SEC_CODE)
       CodeSection = &Section;
@@ -157,7 +157,7 @@ void ObjectFile::initializeSymbols() {
   uint32_t NumSymbols = WasmObj->getNumberOfSymbols();
   Symbols.reserve(NumSymbols);
 
-  for (const WasmImport &Import: WasmObj->imports()) {
+  for (const WasmImport &Import : WasmObj->imports()) {
     switch (Import.Kind) {
     case WASM_EXTERNAL_FUNCTION:
       FunctionImports.emplace_back(Import.Field);
@@ -168,22 +168,22 @@ void ObjectFile::initializeSymbols() {
     }
   }
 
-  for (const SymbolRef &Sym: WasmObj->symbols()) {
+  for (const SymbolRef &Sym : WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
     switch (WasmSym.Type) {
-      case WasmSymbol::SymbolType::FUNCTION_IMPORT:
-        createUndefined(WasmSym);
-        break;
-      case WasmSymbol::SymbolType::GLOBAL_IMPORT:
-        createUndefined(WasmSym);
-        break;
-      case WasmSymbol::SymbolType::FUNCTION_EXPORT:
-      case WasmSymbol::SymbolType::GLOBAL_EXPORT:
-        createDefined(WasmSym);
-        break;
-      case WasmSymbol::SymbolType::DEBUG_FUNCTION_NAME:
-        // These are internal only, no need to create linker symbols for them
-        break;
+    case WasmSymbol::SymbolType::FUNCTION_IMPORT:
+      createUndefined(WasmSym);
+      break;
+    case WasmSymbol::SymbolType::GLOBAL_IMPORT:
+      createUndefined(WasmSym);
+      break;
+    case WasmSymbol::SymbolType::FUNCTION_EXPORT:
+    case WasmSymbol::SymbolType::GLOBAL_EXPORT:
+      createDefined(WasmSym);
+      break;
+    case WasmSymbol::SymbolType::DEBUG_FUNCTION_NAME:
+      // These are internal only, no need to create linker symbols for them
+      break;
     }
   }
 }
@@ -222,7 +222,8 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
 
   DEBUG(dbgs() << "loading lazy: " << displayName(Sym->getName()) << "\n");
   DEBUG(dbgs() << "from archive: " << toString(this) << "\n");
-  //DEBUG(dbgs() << "loading symbol from object symbol: " << C.getName() << "\n");
+  // DEBUG(dbgs() << "loading symbol from object symbol: " << C.getName() <<
+  // "\n");
   MemoryBufferRef MB =
       check(C.getMemoryBufferRef(),
             "could not get the buffer for the member defining symbol " +

@@ -39,6 +39,7 @@ public:
   // Used by ArchiveFile to add members.
   void addArchiveBuffer(MemoryBufferRef MBRef, StringRef SymName,
                         StringRef ParentName);
+
 private:
   void createFiles(llvm::opt::InputArgList &Args);
   void addFile(StringRef Path);

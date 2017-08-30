@@ -82,7 +82,6 @@ void error(const Twine &Msg) {
              << " (use -error-limit=0 to see all errors)\n";
     exitLld(1);
   }
-
 }
 
 void warn(const Twine &Msg) {

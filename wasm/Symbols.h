@@ -39,7 +39,8 @@ public:
   };
 
   Symbol(StringRef Name)
-      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name), ArchiveSymbol(nullptr, 0, 0) {}
+      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name),
+        ArchiveSymbol(nullptr, 0, 0) {}
 
   Kind getKind() const { return SymbolKind; }
 
@@ -71,7 +72,7 @@ public:
   void update(Kind K, InputFile *F = nullptr, const WasmSymbol *Sym = nullptr);
 
   void setArchiveSymbol(const Archive::Symbol &Sym);
-  const Archive::Symbol& getArchiveSymbol() { return ArchiveSymbol; }
+  const Archive::Symbol &getArchiveSymbol() { return ArchiveSymbol; }
 
   // This bit is used by Writer::writeNameSection() to prevent
   // symbols from being written to the symbol table more than once.
@@ -85,8 +86,8 @@ protected:
   StringRef Name;
   Archive::Symbol ArchiveSymbol;
   Kind SymbolKind = InvalidKind;
-  InputFile* File = nullptr;
-  const WasmSymbol* Sym = nullptr;
+  InputFile *File = nullptr;
+  const WasmSymbol *Sym = nullptr;
   uint32_t OutputIndex = 0;
   bool OutputIndexSet = false;
 };
@@ -102,6 +103,5 @@ inline llvm::raw_ostream &operator<<(raw_ostream &OS, wasm::Symbol &Sym) {
 }
 
 } // namespace lld
-
 
 #endif

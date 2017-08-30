@@ -41,5 +41,5 @@ std::string displayName(StringRef Name) {
   return Name;
 }
 
-}
-}
+} // namespace wasm
+} // namespace lld

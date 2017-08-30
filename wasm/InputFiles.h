@@ -11,11 +11,11 @@
 #define LLD_WASM_INPUT_FILES_H
 
 #include "lld/Core/LLVM.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Wasm.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 #include <vector>
 
@@ -118,8 +118,8 @@ public:
   int32_t GlobalIndexOffset = 0;
   int32_t TableIndexOffset = 0;
   uint32_t DataOffset = 0;
-  const WasmSection* CodeSection = nullptr;
-  const WasmSection* DataSection = nullptr;
+  const WasmSection *CodeSection = nullptr;
+  const WasmSection *DataSection = nullptr;
 
   llvm::DenseMap<uint32_t, uint32_t> TypeMap;
   std::vector<StringRef> FunctionImports;

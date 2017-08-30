@@ -35,7 +35,7 @@ struct SectionBookkeeping {
 
 void writeResult(SymbolTable *T);
 
-}
-}
+} // namespace wasm
+} // namespace lld
 
 #endif

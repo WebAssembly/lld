@@ -152,7 +152,7 @@ static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
 // for the exlicit stack pointer (__stack_pointer).
 static void addSyntheticGlobal(StringRef Name, int32_t Value) {
   log("injecting global: " + Name);
-  Symbol* S = Symtab->addDefinedGlobal(Name);
+  Symbol *S = Symtab->addDefinedGlobal(Name);
   S->setOutputIndex(Config->SyntheticGlobals.size());
 
   WasmGlobal Global;
@@ -285,7 +285,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->MaxMemory = getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize = getZOptionValue(Args, "stack-size", WasmPageSize);
 
-  StringRef AllowUndefinedFilename = Args.getLastArgValue(OPT_allow_undefined_file);
+  StringRef AllowUndefinedFilename =
+      Args.getLastArgValue(OPT_allow_undefined_file);
   if (!AllowUndefinedFilename.empty())
     for (StringRef S : parseUndefinedFile(AllowUndefinedFilename))
       Config->AllowUndefinedSymbols.insert(S);
@@ -324,7 +325,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   }
 
   if (!Config->Entry.empty()) {
-    Symbol* Sym = Symtab->find(Config->Entry);
+    Symbol *Sym = Symtab->find(Config->Entry);
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
   }

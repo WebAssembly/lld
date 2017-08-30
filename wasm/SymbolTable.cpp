@@ -76,7 +76,8 @@ void SymbolTable::reportDuplicate(Symbol *Existing, InputFile *NewFile) {
         (NewFile ? toString(NewFile) : "(internal)"));
 }
 
-static void checkSymbolTypes(Symbol *Existing, InputFile *F, const WasmSymbol *New) {
+static void checkSymbolTypes(Symbol *Existing, InputFile *F,
+                             const WasmSymbol *New) {
   if (Existing->isLazy())
     return;
   bool NewIsFunction = New->Type == WasmSymbol::SymbolType::FUNCTION_EXPORT ||
@@ -117,7 +118,8 @@ Symbol *SymbolTable::addDefined(InputFile *F, const WasmSymbol *Sym) {
   } else if (!S->isDefined()) {
     // The existing symbol table entry in undefined. The new symbol replaces
     // it
-    DEBUG(dbgs() << "resolving existing undefined symbol: " << Sym->Name << "\n");
+    DEBUG(dbgs() << "resolving existing undefined symbol: " << Sym->Name
+                 << "\n");
     checkSymbolTypes(S, F, Sym);
     S->update(Kind, F, Sym);
   } else {
@@ -149,7 +151,7 @@ Symbol *SymbolTable::addUndefinedFunction(StringRef Name) {
   return S;
 }
 
-Symbol *SymbolTable::addUndefined(InputFile* F, const WasmSymbol *Sym) {
+Symbol *SymbolTable::addUndefined(InputFile *F, const WasmSymbol *Sym) {
   DEBUG(dbgs() << "addUndefined: " << displayName(Sym->Name) << "\n");
   Symbol *S;
   bool WasInserted;

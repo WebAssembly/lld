@@ -45,7 +45,7 @@ struct Configuration {
 
   std::vector<llvm::StringRef> SearchPaths;
   std::set<llvm::StringRef> AllowUndefinedSymbols;
-  std::vector<std::pair<Symbol*, WasmGlobal>> SyntheticGlobals;
+  std::vector<std::pair<Symbol *, WasmGlobal>> SyntheticGlobals;
 };
 
 // The only instance of Configuration struct.

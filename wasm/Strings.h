@@ -19,7 +19,7 @@ llvm::Optional<std::string> demangle(StringRef Name);
 
 std::string displayName(StringRef Name);
 
-}
-}
+} // namespace wasm
+} // namespace lld
 
 #endif

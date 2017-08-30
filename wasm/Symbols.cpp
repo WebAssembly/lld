@@ -21,13 +21,9 @@ using namespace llvm;
 namespace lld {
 namespace wasm {
 
-StringRef Symbol::getName() const {
-  return Name;
-}
+StringRef Symbol::getName() const { return Name; }
 
-InputFile* Symbol::getFile() const {
-  return File;
-}
+InputFile *Symbol::getFile() const { return File; }
 
 void Symbol::setArchiveSymbol(const Archive::Symbol &Sym) {
   ArchiveSymbol = Sym;
@@ -51,22 +47,22 @@ uint32_t Symbol::getFunctionTypeIndex() const {
   return Import.SigIndex;
 }
 
-const WasmImport& Symbol::getImport() const {
+const WasmImport &Symbol::getImport() const {
   assert(isUndefined());
   assert(Sym != nullptr);
   assert(isa<ObjectFile>(File));
-  ObjectFile* Obj = dyn_cast<ObjectFile>(File);
+  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
   assert(Sym->ElementIndex < Obj->getWasmObj()->imports().size());
   return Obj->getWasmObj()->imports()[Sym->ElementIndex];
 }
 
-const WasmExport& Symbol::getExport() const {
+const WasmExport &Symbol::getExport() const {
   DEBUG(dbgs() << "getExport: " << getName()
                << " ElementIndex: " << Sym->ElementIndex << "\n");
   assert(isDefined());
   assert(Sym != nullptr);
   assert(isa<ObjectFile>(File));
-  ObjectFile* Obj = dyn_cast<ObjectFile>(File);
+  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
   assert(Sym->ElementIndex < Obj->getWasmObj()->exports().size());
   return Obj->getWasmObj()->exports()[Sym->ElementIndex];
 }
@@ -93,9 +89,7 @@ void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym) {
   Sym = WasmSym;
 }
 
-bool Symbol::isWeak() const {
-  return Sym && Sym->isWeak();
-}
+bool Symbol::isWeak() const { return Sym && Sym->isWeak(); }
 
 } // namespace wasm
 
@@ -106,11 +100,16 @@ std::string toString(wasm::Symbol &Sym) {
 
 std::string toString(wasm::Symbol::Kind &Kind) {
   switch (Kind) {
-  case wasm::Symbol::DefinedFunctionKind: return "DefinedFunction";
-  case wasm::Symbol::DefinedGlobalKind: return "DefinedGlobal";
-  case wasm::Symbol::UndefinedFunctionKind: return "UndefinedFunction";
-  case wasm::Symbol::UndefinedGlobalKind: return "UndefinedGlobal";
-  case wasm::Symbol::LazyKind: return "LazyKind";
+  case wasm::Symbol::DefinedFunctionKind:
+    return "DefinedFunction";
+  case wasm::Symbol::DefinedGlobalKind:
+    return "DefinedGlobal";
+  case wasm::Symbol::UndefinedFunctionKind:
+    return "UndefinedFunction";
+  case wasm::Symbol::UndefinedGlobalKind:
+    return "UndefinedGlobal";
+  case wasm::Symbol::LazyKind:
+    return "LazyKind";
   }
 }
 
