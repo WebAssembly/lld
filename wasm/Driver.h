@@ -40,8 +40,6 @@ public:
   void addArchiveBuffer(MemoryBufferRef MBRef, StringRef SymName,
                         StringRef ParentName);
 private:
-  void addSyntheticUndefinedFunction(StringRef Name);
-  void addSyntheticGlobal(StringRef Name, int32_t Value);
   void createFiles(llvm::opt::InputArgList &Args);
   void addFile(StringRef Path);
   void addLibrary(StringRef Name);

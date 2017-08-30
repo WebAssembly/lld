@@ -106,12 +106,13 @@ static std::vector<StringRef> getLines(MemoryBufferRef MB) {
   return Ret;
 }
 
-static void parseUndefinedFile(StringRef Filename) {
+static std::vector<StringRef> parseUndefinedFile(StringRef Filename) {
+  std::vector<StringRef> Result;
   Optional<MemoryBufferRef> Buffer = readFile(Filename);
-  if (!Buffer.hasValue())
-    return;
-  for (StringRef SymbolName : getLines(*Buffer))
-    Config->AllowUndefinedSymbols.insert(SymbolName);
+  if (Buffer.hasValue())
+    for (StringRef SymbolName : getLines(*Buffer))
+      Result.push_back(SymbolName);
+  return Result;
 }
 
 // Parse -color-diagnostics={auto,always,never} or -no-color-diagnostics.
@@ -145,6 +146,35 @@ static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
   return None;
 }
 
+// Inject a new wasm global into the output binary with the given value.
+// Wasm global are used in relocatable object files to model symbol imports
+// and exports.  In the final exectuable the only use of wasm globals is the
+// for the exlicit stack pointer (__stack_pointer).
+static void addSyntheticGlobal(StringRef Name, int32_t Value) {
+  log("injecting global: " + Name);
+  Symbol* S = Symtab->addDefinedGlobal(Name);
+  S->setOutputIndex(Config->SyntheticGlobals.size());
+
+  WasmGlobal Global;
+  Global.Mutable = true;
+  Global.Type = WASM_TYPE_I32;
+  Global.InitExpr.Opcode = WASM_OPCODE_I32_CONST;
+  Global.InitExpr.Value.Int32 = Value;
+  Config->SyntheticGlobals.emplace_back(S, Global);
+}
+
+// Inject a new undefined symbol into the link.  This will cause the link to
+// fail unless this symbol can be found.
+static void addSyntheticUndefinedFunction(StringRef Name) {
+  log("injecting undefined func: " + Name);
+  Symtab->addUndefinedFunction(Name);
+}
+
+static void printHelp(const char *Argv0) {
+  WasmOptTable Table;
+  Table.PrintHelp(outs(), Argv0, "LLVM Linker", false);
+}
+
 WasmOptTable::WasmOptTable() : OptTable(OptInfo) {}
 
 opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
@@ -157,11 +187,6 @@ opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
   for (auto *Arg : Args.filtered(OPT_UNKNOWN))
     fatal(Twine("unknown argument: ") + Arg->getSpelling());
   return Args;
-}
-
-static void printHelp(const char *Argv0) {
-  WasmOptTable Table;
-  Table.PrintHelp(outs(), Argv0, "LLVM Linker", false);
 }
 
 void LinkerDriver::addFile(StringRef Path) {
@@ -199,30 +224,6 @@ void LinkerDriver::addLibrary(StringRef Name) {
   }
 
   error("unable to find library -l" + Name);
-}
-
-// Inject a new wasm global into the output binary with the given value.
-// Wasm global are used in relocatable object files to model symbol imports
-// and exports.  In the final exectuable the only use of wasm globals is the
-// for the exlicit stack pointer (__stack_pointer).
-void LinkerDriver::addSyntheticGlobal(StringRef Name, int32_t Value) {
-  log("injecting global: " + Name);
-  Symbol* S = Symtab->addDefinedGlobal(Name);
-  S->setOutputIndex(Config->SyntheticGlobals.size());
-
-  WasmGlobal Global;
-  Global.Mutable = true;
-  Global.Type = WASM_TYPE_I32;
-  Global.InitExpr.Opcode = WASM_OPCODE_I32_CONST;
-  Global.InitExpr.Value.Int32 = Value;
-  Config->SyntheticGlobals.emplace_back(S, Global);
-}
-
-// Inject a new undefined symbol into the link.  This will cause the link to
-// fail unless this symbol can be found.
-void LinkerDriver::addSyntheticUndefinedFunction(StringRef Name) {
-  log("injecting undefined func: " + Name);
-  Symtab->addUndefinedFunction(Name);
 }
 
 void LinkerDriver::createFiles(opt::InputArgList &Args) {
@@ -286,7 +287,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   StringRef AllowUndefinedFilename = Args.getLastArgValue(OPT_allow_undefined_file);
   if (!AllowUndefinedFilename.empty())
-    parseUndefinedFile(AllowUndefinedFilename);
+    for (StringRef S : parseUndefinedFile(AllowUndefinedFilename))
+      Config->AllowUndefinedSymbols.insert(S);
 
   if (Config->OutputFile.empty())
     fatal("no output file specified");
