@@ -17,12 +17,14 @@
 #include "lld/Config/Version.h"
 #include "lld/Driver/Driver.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Object/Wasm.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 
 using namespace llvm;
 using namespace llvm::sys;
+using namespace llvm::wasm;
 using llvm::sys::Process;
 
 namespace lld {

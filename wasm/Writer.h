@@ -11,12 +11,8 @@
 #define LLD_WASM_WRITER_H
 
 #include "llvm/BinaryFormat/Wasm.h"
-#include "llvm/Object/Wasm.h"
-#include "llvm/Support/raw_ostream.h"
 
-using llvm::raw_fd_ostream;
 using llvm::OwningArrayRef;
-using namespace llvm::wasm;
 
 namespace lld {
 namespace wasm {

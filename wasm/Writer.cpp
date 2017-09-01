@@ -14,8 +14,7 @@
 #include "Memory.h"
 #include "SymbolTable.h"
 #include "Threads.h"
-#include "llvm/Support/Endian.h"
-#include "llvm/Support/EndianStream.h"
+#include "WriterUtils.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Format.h"
@@ -30,12 +29,6 @@ using namespace llvm::wasm;
 using namespace lld;
 using namespace lld::wasm;
 
-struct OutputRelocation {
-  WasmRelocation Reloc;
-  uint32_t NewIndex;
-  int64_t Value;
-};
-
 static void calcRelocations(const ObjectFile &File,
                             const std::vector<WasmRelocation> &Relocs,
                             std::vector<OutputRelocation> &OutputRelocs,
@@ -45,6 +38,8 @@ static void calcRelocations(const ObjectFile &File,
 static void applyRelocations(uint8_t *Data,
                              const std::vector<OutputRelocation> &Relocs,
                              uint32_t Offset);
+
+static const char *sectionTypeToString(uint32_t SectionType);
 
 namespace {
 
@@ -84,76 +79,6 @@ struct WasmSignatureDenseMapInfo {
     return LHS == RHS;
   }
 };
-
-static void debugWrite(uint64_t offset, Twine msg) {
-  DEBUG(dbgs() << format("  | %08" PRIx64 ": ", offset) << msg << "\n");
-}
-
-static void writeUleb128(raw_ostream &OS, uint32_t Number, const char *msg) {
-  if (msg)
-    debugWrite(OS.tell(), msg + formatv(" [{0:x}]", Number));
-  encodeULEB128(Number, OS);
-}
-
-static void writeSleb128(raw_ostream &OS, int32_t Number, const char *msg) {
-  if (msg)
-    debugWrite(OS.tell(), msg + formatv(" [{0:x}]", Number));
-  encodeSLEB128(Number, OS);
-}
-
-static void writeBytes(raw_ostream &OS, const char *bytes, size_t count,
-                        const char *msg = nullptr) {
-  if (msg)
-    debugWrite(OS.tell(), msg);
-  OS.write(bytes, count);
-}
-
-static void writeData(raw_ostream &OS, const StringRef String,
-                       const char *msg = nullptr) {
-  if (msg)
-    debugWrite(OS.tell(), msg + formatv(" [data[{0}]]", String.size()));
-  writeBytes(OS, String.data(), String.size());
-}
-
-static void writeStr(raw_ostream &OS, const StringRef String,
-                      const char *msg = nullptr) {
-  if (msg)
-    debugWrite(OS.tell(), msg + formatv(" [str[{0}]: {1}]", String.size(), String));
-  writeUleb128(OS, String.size(), nullptr);
-  writeBytes(OS, String.data(), String.size());
-}
-
-static const char *sectionTypeToString(uint32_t SectionType) {
-  switch (SectionType) {
-  case WASM_SEC_CUSTOM:
-    return "CUSTOM";
-  case WASM_SEC_TYPE:
-    return "TYPE";
-  case WASM_SEC_IMPORT:
-    return "IMPORT";
-  case WASM_SEC_FUNCTION:
-    return "FUNCTION";
-  case WASM_SEC_TABLE:
-    return "TABLE";
-  case WASM_SEC_MEMORY:
-    return "MEMORY";
-  case WASM_SEC_GLOBAL:
-    return "GLOBAL";
-  case WASM_SEC_EXPORT:
-    return "EXPORT";
-  case WASM_SEC_START:
-    return "START";
-  case WASM_SEC_ELEM:
-    return "ELEM";
-  case WASM_SEC_CODE:
-    return "CODE";
-  case WASM_SEC_DATA:
-    return "DATA";
-  default:
-    fatal("invalid section type");
-    return nullptr;
-  }
-}
 
 class OutputSection;
 std::string toString(OutputSection *Section);
@@ -500,135 +425,149 @@ static void debugPrint(const char *fmt, ...) {
   }
 }
 
-static const char *value_type_to_str(int32_t Type) {
-  switch (Type) {
-  case WASM_TYPE_I32:
-    return "i32";
-  case WASM_TYPE_I64:
-    return "i64";
-  case WASM_TYPE_F32:
-    return "f32";
-  case WASM_TYPE_F64:
-    return "f64";
+static const char *sectionTypeToString(uint32_t SectionType) {
+  switch (SectionType) {
+  case WASM_SEC_CUSTOM:
+    return "CUSTOM";
+  case WASM_SEC_TYPE:
+    return "TYPE";
+  case WASM_SEC_IMPORT:
+    return "IMPORT";
+  case WASM_SEC_FUNCTION:
+    return "FUNCTION";
+  case WASM_SEC_TABLE:
+    return "TABLE";
+  case WASM_SEC_MEMORY:
+    return "MEMORY";
+  case WASM_SEC_GLOBAL:
+    return "GLOBAL";
+  case WASM_SEC_EXPORT:
+    return "EXPORT";
+  case WASM_SEC_START:
+    return "START";
+  case WASM_SEC_ELEM:
+    return "ELEM";
+  case WASM_SEC_CODE:
+    return "CODE";
+  case WASM_SEC_DATA:
+    return "DATA";
   default:
-    fatal("invalid value type: " + Twine(Type));
+    fatal("invalid section type");
     return nullptr;
   }
 }
 
-static void writeU8(raw_ostream &OS, uint8_t byte, const char *msg) {
-  OS << byte;
-}
-
-static void writeU32(raw_ostream &OS, uint32_t Number, const char *msg) {
-  debugWrite(OS.tell(), msg + formatv("[{0:x}]", Number));
-  support::endian::Writer<support::little>(OS).write(Number);
-}
-
-static void writeValueType(raw_ostream &OS, int32_t Type, const char *msg) {
-  debugWrite(OS.tell(), msg + formatv("[type: {0}]", value_type_to_str(Type)));
-  writeSleb128(OS, Type, nullptr);
-}
-
-static void writeSig(raw_ostream &OS, const WasmSignature &Sig) {
-  writeSleb128(OS, WASM_TYPE_FUNC, "signature type");
-  writeUleb128(OS, Sig.ParamTypes.size(), "param count");
-  for (int32_t ParamType : Sig.ParamTypes) {
-    writeValueType(OS, ParamType, "param type");
-  }
-  if (Sig.ReturnType == WASM_TYPE_NORESULT) {
-    writeUleb128(OS, 0, "result count");
-  } else {
-    writeUleb128(OS, 1, "result count");
-    writeValueType(OS, Sig.ReturnType, "result type");
-  }
-}
-
-static void writeInitExpr(raw_ostream &OS, const WasmInitExpr &InitExpr) {
-  writeU8(OS, InitExpr.Opcode, "opcode");
-  switch (InitExpr.Opcode) {
-  case WASM_OPCODE_I32_CONST:
-    writeSleb128(OS, InitExpr.Value.Int32, "literal (i32)");
+static uint32_t calcNewIndex(const ObjectFile &File,
+                             const WasmRelocation &Reloc) {
+  uint32_t NewIndex = 0;
+  switch (Reloc.Type) {
+  case R_WEBASSEMBLY_TYPE_INDEX_LEB:
+    NewIndex = File.relocateTypeIndex(Reloc.Index);
     break;
-  case WASM_OPCODE_I64_CONST:
-    writeSleb128(OS, InitExpr.Value.Int64, "literal (i64)");
+  case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
+    NewIndex = File.relocateFunctionIndex(Reloc.Index);
     break;
-  case WASM_OPCODE_GET_GLOBAL:
-    writeUleb128(OS, InitExpr.Value.Global, "literal (global index)");
+  case R_WEBASSEMBLY_TABLE_INDEX_I32:
+  case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
+    NewIndex = File.relocateTableIndex(Reloc.Index);
     break;
-  default:
-    fatal("unknown opcode in init expr: " + Twine(InitExpr.Opcode));
-    break;
-  }
-  writeU8(OS, WASM_OPCODE_END, "opcode:end");
-}
-
-static void writeLimits(raw_ostream &OS, const WasmLimits &Limits) {
-  writeUleb128(OS, Limits.Flags, "limits flags");
-  writeUleb128(OS, Limits.Initial, "limits initial");
-  if (Limits.Flags & WASM_LIMITS_FLAG_HAS_MAX)
-    writeUleb128(OS, Limits.Maximum, "limits max");
-}
-
-static void writeGlobal(raw_ostream &OS, const WasmGlobal &Global) {
-  writeValueType(OS, Global.Type, "global type");
-  writeUleb128(OS, Global.Mutable, "global mutable");
-  writeInitExpr(OS, Global.InitExpr);
-}
-
-static void writeImport(raw_ostream &OS, const WasmImport &Import) {
-  writeStr(OS, Import.Module, "import module name");
-  writeStr(OS, Import.Field, "import field name");
-  writeU8(OS, Import.Kind, "import kind");
-  switch (Import.Kind) {
-  case WASM_EXTERNAL_FUNCTION:
-    writeUleb128(OS, Import.SigIndex, "import sig index");
-    break;
-  case WASM_EXTERNAL_GLOBAL:
-    writeValueType(OS, Import.Global.Type, "import global type");
-    writeUleb128(OS, Import.Global.Mutable, "import global mutable");
-    break;
-  case WASM_EXTERNAL_MEMORY:
-    writeLimits(OS, Import.Memory);
-    break;
-  default:
-    fatal("unsupported import type: " + Twine(Import.Kind));
-    break;
-  }
-}
-
-static void writeExport(raw_ostream &OS, const WasmExport &Export) {
-  writeStr(OS, Export.Name, "export name");
-  writeU8(OS, Export.Kind, "export kind");
-  switch (Export.Kind) {
-  case WASM_EXTERNAL_FUNCTION:
-    writeUleb128(OS, Export.Index, "function index");
-    break;
-  case WASM_EXTERNAL_GLOBAL:
-    writeUleb128(OS, Export.Index, "global index");
-    break;
-  case WASM_EXTERNAL_MEMORY:
-    writeUleb128(OS, Export.Index, "memory index");
-    break;
-  default:
-    fatal("unsupported export type: " + Twine(Export.Kind));
-    break;
-  }
-}
-
-static void writeReloc(raw_ostream &OS, const OutputRelocation &Reloc) {
-  writeUleb128(OS, Reloc.Reloc.Type, "reloc type");
-  writeUleb128(OS, Reloc.Reloc.Offset, "reloc offset");
-  writeUleb128(OS, Reloc.NewIndex, "reloc index");
-
-  switch (Reloc.Reloc.Type) {
+  case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    writeUleb128(OS, Reloc.Reloc.Addend, "reloc addend");
+    NewIndex = File.getGlobalAddress(Reloc.Index);
     break;
   default:
+    fatal("unhandled relocation type: " + Twine(Reloc.Type));
     break;
+  }
+  return NewIndex;
+}
+
+static void calcRelocations(const ObjectFile &File,
+                            const std::vector<WasmRelocation> &Relocs,
+                            std::vector<OutputRelocation> &OutputRelocs,
+                            uint32_t OutputOffset, uint32_t Start,
+                            uint32_t End) {
+  log("calcRelocations: " + File.getName() + " offset=" + Twine(OutputOffset));
+  for (const WasmRelocation &Reloc : Relocs) {
+    int64_t NewIndex = calcNewIndex(File, Reloc);
+    if (Start && End) {
+      if (Reloc.Offset < Start && Reloc.Offset >= End)
+        continue;
+    }
+    OutputRelocation NewReloc;
+    NewReloc.Reloc = Reloc;
+    NewReloc.Reloc.Offset += OutputOffset;
+    NewReloc.NewIndex = NewIndex;
+    DEBUG(dbgs() << "reloc: type=" << Reloc.Type << " index=" << Reloc.Index
+                 << " offset=" << Reloc.Offset << " new=" << NewIndex
+                 << " newOffset=" << NewReloc.Reloc.Offset << "\n");
+
+    switch (Reloc.Type) {
+    case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
+    case R_WEBASSEMBLY_MEMORY_ADDR_I32:
+    case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
+      NewReloc.Value = File.getGlobalAddress(Reloc.Index) + Reloc.Addend;
+      break;
+    default:
+      NewReloc.Value = NewIndex;
+    }
+
+    OutputRelocs.emplace_back(NewReloc);
+  }
+}
+
+static void writeRelocValue(const OutputRelocation &Reloc, uint8_t *Location) {
+  DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
+               << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
+               << " offset=" << Reloc.Reloc.Offset << "\n");
+  RelocEncoding Encoding;
+  switch (Reloc.Reloc.Type) {
+  case R_WEBASSEMBLY_TYPE_INDEX_LEB:
+  case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
+    assert(decodeULEB128(Location) == Reloc.Reloc.Index);
+  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
+  case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
+    Encoding = RelocEncoding::Uleb128;
+    break;
+  case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
+    assert(decodeSLEB128(Location) == Reloc.Reloc.Index);
+  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
+    Encoding = RelocEncoding::Sleb128;
+    break;
+  case R_WEBASSEMBLY_TABLE_INDEX_I32:
+  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
+    Encoding = RelocEncoding::I32;
+    break;
+  }
+
+  // Encode the new value
+  switch (Encoding) {
+  case RelocEncoding::Uleb128: {
+    unsigned Padding = paddingFor5ByteULEB128(Reloc.Value);
+    encodeULEB128(Reloc.Value, Location, Padding);
+    break;
+  }
+  case RelocEncoding::Sleb128: {
+    unsigned Padding = paddingFor5ByteSLEB128(Reloc.Value);
+    encodeSLEB128(Reloc.Value, Location, Padding);
+    break;
+  }
+  case RelocEncoding::I32:
+    support::endian::write32<support::little>(Location, Reloc.Value);
+    break;
+  }
+}
+
+static void applyRelocations(uint8_t *Data,
+                             const std::vector<OutputRelocation> &Relocs,
+                             uint32_t Offset) {
+  log("applyRelocations: offset=" + Twine(Offset) +
+      " count=" + Twine(Relocs.size()));
+  for (const OutputRelocation &Reloc : Relocs) {
+    uint8_t *Location = Data + Reloc.Reloc.Offset - Offset;
+    writeRelocValue(Reloc, Location);
   }
 }
 
@@ -866,120 +805,6 @@ void Writer::createElemSection() {
                       "function index");
       }
     }
-  }
-}
-
-static uint32_t calcNewIndex(const ObjectFile &File,
-                             const WasmRelocation &Reloc) {
-  uint32_t NewIndex = 0;
-  switch (Reloc.Type) {
-  case R_WEBASSEMBLY_TYPE_INDEX_LEB:
-    NewIndex = File.relocateTypeIndex(Reloc.Index);
-    break;
-  case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
-    NewIndex = File.relocateFunctionIndex(Reloc.Index);
-    break;
-  case R_WEBASSEMBLY_TABLE_INDEX_I32:
-  case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-    NewIndex = File.relocateTableIndex(Reloc.Index);
-    break;
-  case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
-  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
-  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
-  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    NewIndex = File.getGlobalAddress(Reloc.Index);
-    break;
-  default:
-    fatal("unhandled relocation type: " + Twine(Reloc.Type));
-    break;
-  }
-  return NewIndex;
-}
-
-static void writeRelocValue(const OutputRelocation &Reloc, uint8_t *Location) {
-  DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
-               << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
-               << " offset=" << Reloc.Reloc.Offset << "\n");
-  RelocEncoding Encoding;
-  switch (Reloc.Reloc.Type) {
-  case R_WEBASSEMBLY_TYPE_INDEX_LEB:
-  case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
-    assert(decodeULEB128(Location) == Reloc.Reloc.Index);
-  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
-  case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
-    Encoding = RelocEncoding::Uleb128;
-    break;
-  case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-    assert(decodeSLEB128(Location) == Reloc.Reloc.Index);
-  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
-    Encoding = RelocEncoding::Sleb128;
-    break;
-  case R_WEBASSEMBLY_TABLE_INDEX_I32:
-  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    Encoding = RelocEncoding::I32;
-    break;
-  }
-
-  // Encode the new value
-  switch (Encoding) {
-  case RelocEncoding::Uleb128: {
-    unsigned Padding = paddingFor5ByteULEB128(Reloc.Value);
-    encodeULEB128(Reloc.Value, Location, Padding);
-    break;
-  }
-  case RelocEncoding::Sleb128: {
-    unsigned Padding = paddingFor5ByteSLEB128(Reloc.Value);
-    encodeSLEB128(Reloc.Value, Location, Padding);
-    break;
-  }
-  case RelocEncoding::I32:
-    support::endian::write32<support::little>(Location, Reloc.Value);
-    break;
-  }
-}
-
-static void calcRelocations(const ObjectFile &File,
-                            const std::vector<WasmRelocation> &Relocs,
-                            std::vector<OutputRelocation> &OutputRelocs,
-                            uint32_t OutputOffset, uint32_t Start,
-                            uint32_t End) {
-  log("calcRelocations: " + File.getName() + " offset=" + Twine(OutputOffset));
-  for (const WasmRelocation &Reloc : Relocs) {
-    int64_t NewIndex = calcNewIndex(File, Reloc);
-    if (Start && End) {
-      if (Reloc.Offset < Start && Reloc.Offset >= End)
-        continue;
-    }
-    OutputRelocation NewReloc;
-    NewReloc.Reloc = Reloc;
-    NewReloc.Reloc.Offset += OutputOffset;
-    NewReloc.NewIndex = NewIndex;
-    DEBUG(dbgs() << "reloc: type=" << Reloc.Type << " index=" << Reloc.Index
-                 << " offset=" << Reloc.Offset << " new=" << NewIndex
-                 << " newOffset=" << NewReloc.Reloc.Offset << "\n");
-
-    switch (Reloc.Type) {
-    case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
-    case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
-      NewReloc.Value = File.getGlobalAddress(Reloc.Index) + Reloc.Addend;
-      break;
-    default:
-      NewReloc.Value = NewIndex;
-    }
-
-    OutputRelocs.emplace_back(NewReloc);
-  }
-}
-
-static void applyRelocations(uint8_t *Data,
-                             const std::vector<OutputRelocation> &Relocs,
-                             uint32_t Offset) {
-  log("applyRelocations: offset=" + Twine(Offset) +
-      " count=" + Twine(Relocs.size()));
-  for (const OutputRelocation &Reloc : Relocs) {
-    uint8_t *Location = Data + Reloc.Reloc.Offset - Offset;
-    writeRelocValue(Reloc, Location);
   }
 }
 
