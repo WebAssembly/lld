@@ -89,7 +89,7 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         Functions:       [ 3, 1 ]
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Relocations:     
-; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_GLOBAL_ADDR_SLEB
+; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_MEMORY_ADDR_SLEB
 ; CHECK-NEXT:         Index:           0
 ; CHECK-NEXT:         Offset:          0x00000004
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_FUNCTION_INDEX_LEB

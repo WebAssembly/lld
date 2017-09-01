@@ -640,9 +640,9 @@ static void write_reloc(raw_ostream& OS, const OutputRelocation &Reloc) {
   write_uleb128(OS, Reloc.NewIndex, "reloc index");
 
   switch (Reloc.Type) {
-  case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_I32:
+  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
     write_uleb128(OS, Reloc.Addend, "reloc addend");
     break;
   default:
@@ -900,9 +900,9 @@ static uint32_t calcNewIndex(const ObjectFile &File, const WasmRelocation &Reloc
     NewIndex = File.relocateTableIndex(Reloc.Index);
     break;
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_I32:
+  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
     NewIndex = File.getGlobalAddress(Reloc.Index);
     break;
   default:
@@ -921,17 +921,17 @@ static void writeRelocValue(const OutputRelocation &Reloc, uint8_t *Location) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
     assert(decodeULEB128(Location) == Reloc.Index);
-  case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
     Encoding = RelocEncoding::Uleb128;
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
     assert(decodeSLEB128(Location) == Reloc.Index);
-  case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
+  case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
     Encoding = RelocEncoding::Sleb128;
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_I32:
-  case R_WEBASSEMBLY_GLOBAL_ADDR_I32:
+  case R_WEBASSEMBLY_MEMORY_ADDR_I32:
     Encoding = RelocEncoding::I32;
     break;
   }
@@ -976,9 +976,9 @@ static void calcRelocations(const ObjectFile &File,
                  << " newOffset=" << NewReloc.Offset << "\n");
 
     switch (Reloc.Type) {
-    case R_WEBASSEMBLY_GLOBAL_ADDR_SLEB:
-    case R_WEBASSEMBLY_GLOBAL_ADDR_I32:
-    case R_WEBASSEMBLY_GLOBAL_ADDR_LEB:
+    case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
+    case R_WEBASSEMBLY_MEMORY_ADDR_I32:
+    case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
       NewReloc.Value = File.getGlobalAddress(Reloc.Index) + Reloc.Addend;
       break;
     default:
