@@ -410,16 +410,6 @@ private:
 
 } // anonymous namespace
 
-// Return the padding size to write a 32-bit value into a 5-byte ULEB128.
-static unsigned paddingFor5ByteULEB128(uint32_t X) {
-  return X == 0 ? 4 : (4u - (31u - countLeadingZeros(X)) / 7u);
-}
-
-// Return the padding size to write a 32-bit value into a 5-byte SLEB128.
-static unsigned paddingFor5ByteSLEB128(int32_t X) {
-  return 5 - getSLEB128Size(X);
-}
-
 static void debugPrint(const char *fmt, ...) {
   if (!Config->Verbose)
     return;
@@ -556,13 +546,11 @@ static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
   // Encode the new value
   switch (Encoding) {
   case RelocEncoding::Uleb128: {
-    unsigned Padding = paddingFor5ByteULEB128(Reloc.Value);
-    encodeULEB128(Reloc.Value, Buf, Padding);
+    encodeULEB128(Reloc.Value, Buf, 5);
     break;
   }
   case RelocEncoding::Sleb128: {
-    unsigned Padding = paddingFor5ByteSLEB128(Reloc.Value);
-    encodeSLEB128(Reloc.Value, Buf, Padding);
+    encodeSLEB128(Reloc.Value, Buf, 5);
     break;
   }
   case RelocEncoding::I32:
