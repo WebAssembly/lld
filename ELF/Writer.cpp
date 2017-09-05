@@ -54,6 +54,7 @@ private:
   void sortSections();
   void finalizeSections();
   void addPredefinedSections();
+  void addPredefinedSymbols();
 
   std::vector<PhdrEntry *> createPhdrs();
   void removeEmptyPTLoad();
@@ -199,6 +200,12 @@ template <class ELFT> void Writer<ELFT>::run() {
   // output sections.
   parallelForEach(OutputSections,
                   [](OutputSection *Sec) { Sec->maybeCompress<ELFT>(); });
+
+  // Generate assignments for predefined symbols (e.g. _end or _etext)
+  // before assigning addresses. These symbols may be referred to from
+  // the linker script and we need to ensure they have the correct value
+  // prior evaluating any expressions using these symbols.
+  addPredefinedSymbols();
 
   Script->assignAddresses();
   Script->allocateHeaders(Phdrs);
@@ -918,6 +925,81 @@ template <class ELFT> void Writer<ELFT>::createSections() {
   sortInitFini(findSection(".fini_array"));
   sortCtorsDtors(findSection(".ctors"));
   sortCtorsDtors(findSection(".dtors"));
+}
+
+// This function generates assignments for predefined symbols (e.g. _end or
+// _etext) and inserts them into the commands sequence to be processed at the
+// appropriate time. This ensures that the value is going to be correct by the
+// time any references to these symbols are processed and is equivalent to
+// defining these symbols explicitly in the linker script.
+template <class ELFT> void Writer<ELFT>::addPredefinedSymbols() {
+  PhdrEntry *Last = nullptr;
+  PhdrEntry *LastRO = nullptr;
+  PhdrEntry *LastRW = nullptr;
+
+  for (PhdrEntry *P : Phdrs) {
+    if (P->p_type != PT_LOAD)
+      continue;
+    Last = P;
+    if (P->p_flags & PF_W)
+      LastRW = P;
+    else
+      LastRO = P;
+  }
+
+  auto Make = [](DefinedRegular *S) {
+    auto *Cmd = make<SymbolAssignment>(
+        S->getName(), [=] { return Script->getSymbolValue("", "."); }, "");
+    Cmd->Sym = S;
+    return Cmd;
+  };
+
+  std::vector<BaseCommand *> &V = Script->Opt.Commands;
+
+  // _end is the first location after the uninitialized data region.
+  if (Last) {
+    for (size_t I = 0; I < V.size(); ++I) {
+      if (V[I] != Last->Last)
+        continue;
+      if (ElfSym::End2)
+        V.insert(V.begin() + I + 1, Make(ElfSym::End2));
+      if (ElfSym::End1)
+        V.insert(V.begin() + I + 1, Make(ElfSym::End1));
+      break;
+    }
+  }
+
+  // _etext is the first location after the last read-only loadable segment.
+  if (LastRO) {
+    for (size_t I = 0; I < V.size(); ++I) {
+      if (V[I] != LastRO->Last)
+        continue;
+      if (ElfSym::Etext2)
+        V.insert(V.begin() + I + 1, Make(ElfSym::Etext2));
+      if (ElfSym::Etext1)
+        V.insert(V.begin() + I + 1, Make(ElfSym::Etext1));
+      break;
+    }
+  }
+
+  // _edata points to the end of the last non SHT_NOBITS section.
+  if (LastRW) {
+    size_t I = 0;
+    for (; I < V.size(); ++I)
+      if (V[I] == LastRW->First)
+        break;
+
+    for (; I < V.size(); ++I) {
+      auto *Sec = dyn_cast<OutputSection>(V[I]);
+      if (!Sec || Sec->Type != SHT_NOBITS)
+        continue;
+      if (ElfSym::Edata2)
+        V.insert(V.begin() + I, Make(ElfSym::Edata2));
+      if (ElfSym::Edata1)
+        V.insert(V.begin() + I, Make(ElfSym::Edata1));
+      break;
+    }
+  }
 }
 
 // We want to find how similar two ranks are.
@@ -1718,42 +1800,6 @@ static uint16_t getELFType() {
 // to each section. This function fixes some predefined
 // symbol values that depend on section address and size.
 template <class ELFT> void Writer<ELFT>::fixPredefinedSymbols() {
-  // _etext is the first location after the last read-only loadable segment.
-  // _edata is the first location after the last read-write loadable segment.
-  // _end is the first location after the uninitialized data region.
-  PhdrEntry *Last = nullptr;
-  PhdrEntry *LastRO = nullptr;
-  PhdrEntry *LastRW = nullptr;
-  for (PhdrEntry *P : Phdrs) {
-    if (P->p_type != PT_LOAD)
-      continue;
-    Last = P;
-    if (P->p_flags & PF_W)
-      LastRW = P;
-    else
-      LastRO = P;
-  }
-
-  auto Set = [](DefinedRegular *S, OutputSection *Cmd, uint64_t Value) {
-    if (S) {
-      S->Section = Cmd;
-      S->Value = Value;
-    }
-  };
-
-  if (Last) {
-    Set(ElfSym::End1, Last->First, Last->p_memsz);
-    Set(ElfSym::End2, Last->First, Last->p_memsz);
-  }
-  if (LastRO) {
-    Set(ElfSym::Etext1, LastRO->First, LastRO->p_filesz);
-    Set(ElfSym::Etext2, LastRO->First, LastRO->p_filesz);
-  }
-  if (LastRW) {
-    Set(ElfSym::Edata1, LastRW->First, LastRW->p_filesz);
-    Set(ElfSym::Edata2, LastRW->First, LastRW->p_filesz);
-  }
-
   if (ElfSym::Bss)
     ElfSym::Bss->Section = findSection(".bss");
 
@@ -1886,7 +1932,8 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
       LastRX = nullptr;
   }
   if (LastRX)
-    LastRX->p_filesz = alignTo(LastRX->p_filesz, Target->PageSize);
+    LastRX->p_memsz = LastRX->p_filesz =
+        alignTo(LastRX->p_filesz, Target->PageSize);
 }
 
 // Write section contents to a mmap'ed file.
