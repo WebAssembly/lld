@@ -719,8 +719,9 @@ void Writer::createExportSection() {
   if (ExportMemory)
     NumExports += 1;
 
-  if (ExportMain)
+  if (ExportMain && Symtab->find(Config->Entry)->isDefined()) {
     NumExports += 1;
+  }
 
   if (ExportOther) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
@@ -751,20 +752,22 @@ void Writer::createExportSection() {
 
   if (ExportMain) {
     Symbol *Sym = Symtab->find(Config->Entry);
-    if (!Sym->isFunction())
-      fatal("entry point is not a function: " + Sym->getName());
+    if (Sym->isDefined()) {
+      if (!Sym->isFunction())
+        fatal("entry point is not a function: " + Sym->getName());
 
-    if (Config->Entry != Config->ExportEntryAs || !ExportOther) {
-      Symbol *ExportAs = Symtab->find(Config->ExportEntryAs);
-      if (ExportAs && ExportAs->isDefined()) {
-        warn("can't export entry point");
-        fatal("already an existing exported symbol: " + Config->ExportEntryAs);
+      if (Config->Entry != Config->ExportEntryAs || !ExportOther) {
+        Symbol *ExportAs = Symtab->find(Config->ExportEntryAs);
+        if (ExportAs && ExportAs->isDefined()) {
+          warn("can't export entry point");
+          fatal("already an existing exported symbol: " + Config->ExportEntryAs);
+        }
+        WasmExport MainExport;
+        MainExport.Name = Config->ExportEntryAs;
+        MainExport.Kind = WASM_EXTERNAL_FUNCTION;
+        MainExport.Index = Sym->getOutputIndex();
+        writeExport(OS, MainExport);
       }
-      WasmExport MainExport;
-      MainExport.Name = Config->ExportEntryAs;
-      MainExport.Kind = WASM_EXTERNAL_FUNCTION;
-      MainExport.Index = Sym->getOutputIndex();
-      writeExport(OS, MainExport);
     }
   }
 
