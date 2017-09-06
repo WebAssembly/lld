@@ -128,7 +128,6 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        16
 ; CHECK-NEXT:     DataAlignment:   4
-; CHECK-NEXT:     SymbolInfo:      
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   
