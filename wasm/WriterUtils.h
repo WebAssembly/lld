@@ -33,13 +33,13 @@ void writeUleb128(raw_ostream &OS, uint32_t Number, const char *msg);
 
 void writeSleb128(raw_ostream &OS, int32_t Number, const char *msg);
 
-void writeBytes(raw_ostream & OS, const char *bytes, size_t count,
+void writeBytes(raw_ostream &OS, const char *bytes, size_t count,
                 const char *msg = nullptr);
 
-void writeData(raw_ostream & OS, const StringRef String,
+void writeData(raw_ostream &OS, const StringRef String,
                const char *msg = nullptr);
 
-void writeStr(raw_ostream & OS, const StringRef String,
+void writeStr(raw_ostream &OS, const StringRef String,
               const char *msg = nullptr);
 
 void writeU8(raw_ostream &OS, uint8_t byte, const char *msg);

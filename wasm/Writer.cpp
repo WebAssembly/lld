@@ -16,8 +16,8 @@
 #include "Threads.h"
 #include "WriterUtils.h"
 #include "llvm/Support/FileOutputBuffer.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/LEB128.h"
 
 #include <cstdarg>
@@ -29,7 +29,7 @@ using namespace llvm::wasm;
 using namespace lld;
 using namespace lld::wasm;
 
-static void calcRelocations(const ObjectFile &File,
+static void calcRelocations(ObjectFile &File,
                             const std::vector<WasmRelocation> &Relocs,
                             std::vector<OutputRelocation> &OutputRelocs,
                             uint32_t OutputOffset, uint32_t Start = 0,
@@ -98,7 +98,7 @@ public:
   void createHeader(size_t BodySize) {
     raw_string_ostream OS(Header);
     debugWrite(OS.tell(),
-               "section type " + formatv("[{0}]", sectionTypeToString(Type)));
+               "section type [" + Twine(sectionTypeToString(Type)) + "]");
     writeUleb128(OS, Type, nullptr);
     writeUleb128(OS, BodySize, "section size");
     OS.flush();
@@ -108,7 +108,7 @@ public:
 
   virtual size_t getSize() const = 0;
   virtual void writeTo(uint8_t *Buf) = 0;
-  virtual void finalizeContents() {};
+  virtual void finalizeContents(){};
 
   std::string Header;
   uint32_t Type;
@@ -168,72 +168,9 @@ public:
 
 class CodeSection : public OutputSection {
 public:
-  explicit CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
-      : OutputSection(WASM_SEC_CODE), InputObjects(Objs), BodySize(0) {
-
-    raw_string_ostream OS(CodeSectionHeader);
-    writeUleb128(OS, NumFunctions, "function count");
-    OS.flush();
-    BodySize = CodeSectionHeader.size();
-
-    uint32_t NumRelocations = 0;
-    for (ObjectFile *File : InputObjects) {
-      if (!File->CodeSection)
-        continue;
-
-      NumRelocations += File->CodeSection->Relocations.size();
-      const ArrayRef<uint8_t> Content = File->CodeSection->Content;
-      unsigned HeaderSize = 0;
-      decodeULEB128(Content.data(), &HeaderSize);
-
-      calcRelocations(*File, File->CodeSection->Relocations, Relocations,
-                      BodySize - CodeSectionHeader.size());
-
-      size_t PayloadSize = Content.size() - HeaderSize;
-      BodySize += PayloadSize;
-    }
-    assert(Relocations.size() == NumRelocations);
-    log("NumRelocations: " + Twine(NumRelocations));
-
-    createHeader(BodySize);
-  }
-
+  explicit CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs);
   size_t getSize() const override { return Header.size() + BodySize; }
-
-  void writeTo(uint8_t *Buf) override {
-    log("writing " + toString(this));
-    log(" size=" + Twine(getSize()));
-    Buf += Offset;
-
-    // Write section header
-    memcpy(Buf, Header.data(), Header.size());
-    Buf += Header.size();
-
-    uint8_t *ContentsStart = Buf;
-
-    // Write code section headers
-    memcpy(Buf, CodeSectionHeader.data(), CodeSectionHeader.size());
-    Buf += CodeSectionHeader.size();
-
-    // Write code section body
-    for (ObjectFile *File : InputObjects) {
-      if (!File->CodeSection)
-        continue;
-
-      const ArrayRef<uint8_t> &Content(File->CodeSection->Content);
-
-      // Payload doesn't include the initial header (function count)
-      unsigned HeaderSize = 0;
-      decodeULEB128(Content.data(), &HeaderSize);
-
-      size_t PayloadSize = Content.size() - HeaderSize;
-      memcpy(Buf, Content.data() + HeaderSize, PayloadSize);
-
-      Buf += PayloadSize;
-    }
-
-    applyRelocations(ContentsStart, Relocations, 0);
-  }
+  void writeTo(uint8_t *Buf) override;
 
 protected:
   std::vector<ObjectFile *> &InputObjects;
@@ -248,83 +185,76 @@ struct OutputDataSegment {
   const object::WasmSegment *Segment;
 };
 
+CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
+    : OutputSection(WASM_SEC_CODE), InputObjects(Objs), BodySize(0) {
+  raw_string_ostream OS(CodeSectionHeader);
+  writeUleb128(OS, NumFunctions, "function count");
+  OS.flush();
+  BodySize = CodeSectionHeader.size();
+
+  uint32_t NumRelocations = 0;
+  for (ObjectFile *File : InputObjects) {
+    if (!File->CodeSection)
+      continue;
+
+    NumRelocations += File->CodeSection->Relocations.size();
+    const ArrayRef<uint8_t> Content = File->CodeSection->Content;
+    unsigned HeaderSize = 0;
+    decodeULEB128(Content.data(), &HeaderSize);
+
+    calcRelocations(*File, File->CodeSection->Relocations, Relocations,
+                    BodySize - CodeSectionHeader.size());
+
+    size_t PayloadSize = Content.size() - HeaderSize;
+    BodySize += PayloadSize;
+  }
+  assert(Relocations.size() == NumRelocations);
+  log("NumRelocations: " + Twine(NumRelocations));
+
+  createHeader(BodySize);
+}
+
+void CodeSection::writeTo(uint8_t *Buf) {
+  log("writing " + toString(this));
+  log(" size=" + Twine(getSize()));
+  Buf += Offset;
+
+  // Write section header
+  memcpy(Buf, Header.data(), Header.size());
+  Buf += Header.size();
+
+  uint8_t *ContentsStart = Buf;
+
+  // Write code section headers
+  memcpy(Buf, CodeSectionHeader.data(), CodeSectionHeader.size());
+  Buf += CodeSectionHeader.size();
+
+  // Write code section body
+  for (ObjectFile *File : InputObjects) {
+    if (!File->CodeSection)
+      continue;
+
+    const ArrayRef<uint8_t> &Content(File->CodeSection->Content);
+
+    // Payload doesn't include the initial header (function count)
+    unsigned HeaderSize = 0;
+    decodeULEB128(Content.data(), &HeaderSize);
+
+    size_t PayloadSize = Content.size() - HeaderSize;
+    memcpy(Buf, Content.data() + HeaderSize, PayloadSize);
+
+    Buf += PayloadSize;
+  }
+
+  applyRelocations(ContentsStart, Relocations, 0);
+}
+
 class DataSection : public OutputSection {
 public:
   explicit DataSection(uint32_t NumDataSegments,
-                       std::vector<ObjectFile *> &Objs)
-      : OutputSection(WASM_SEC_DATA), InputObjects(Objs), BodySize(0) {
-
-    raw_string_ostream OS(DataSectionHeader);
-    writeUleb128(OS, NumDataSegments, "data segment count");
-    OS.flush();
-    BodySize = DataSectionHeader.size();
-
-    uint32_t NumRelocations = 0;
-
-    for (ObjectFile *File : Symtab->ObjectFiles) {
-      if (!File->DataSection)
-        continue;
-      NumRelocations += File->DataSection->Relocations.size();
-      assert(File->getWasmObj()->dataSegments().size() <= 1);
-      // uint32_t DataSectionOffset = BodySize - DataSectionHeader.size();
-      for (const object::WasmSegment &Segment :
-           File->getWasmObj()->dataSegments()) {
-        std::string SegmentHeader;
-        raw_string_ostream OS(SegmentHeader);
-        writeUleb128(OS, Segment.Data.MemoryIndex, "memory index");
-        writeUleb128(OS, WASM_OPCODE_I32_CONST, "opcode:i32const");
-        uint32_t NewOffset = Segment.Data.Offset.Value.Int32 + File->DataOffset;
-        writeSleb128(OS, NewOffset, "memory offset");
-        writeUleb128(OS, WASM_OPCODE_END, "opcode:end");
-        writeUleb128(OS, Segment.Data.Content.size(), "segment size");
-        OS.flush();
-        BodySize += SegmentHeader.size();
-
-        log("Data segment: size=" + Twine(Segment.Data.Content.size()));
-        calcRelocations(*File, File->DataSection->Relocations, Relocations,
-                        BodySize - Segment.SectionOffset, Segment.SectionOffset,
-                        Segment.SectionOffset + Segment.Data.Content.size());
-        BodySize += Segment.Data.Content.size();
-        OutputSegments.emplace_back(SegmentHeader, &Segment);
-      }
-    }
-
-    log("NumRelocations: " + Twine(NumRelocations));
-    assert(Relocations.size() == NumRelocations);
-
-    createHeader(BodySize);
-  }
-
+                       std::vector<ObjectFile *> &Objs);
   size_t getSize() const override { return Header.size() + BodySize; }
-
-  void writeTo(uint8_t *Buf) override {
-    log("writing " + toString(this));
-    log(" size=" + Twine(getSize()) + " body=" + Twine(BodySize));
-    Buf += Offset;
-
-    // Write section header
-    memcpy(Buf, Header.data(), Header.size());
-    Buf += Header.size();
-
-    uint8_t *ContentsStart = Buf;
-
-    // Write code section headers
-    memcpy(Buf, DataSectionHeader.data(), DataSectionHeader.size());
-    Buf += DataSectionHeader.size();
-
-    for (OutputDataSegment &Segment : OutputSegments) {
-      // Write segment header
-      memcpy(Buf, Segment.Header.data(), Segment.Header.size());
-      Buf += Segment.Header.size();
-
-      // Data data payload
-      const ArrayRef<uint8_t> &Content(Segment.Segment->Data.Content);
-      memcpy(Buf, Content.data(), Content.size());
-      Buf += Content.size();
-    }
-
-    applyRelocations(ContentsStart, Relocations, 0);
-  }
+  void writeTo(uint8_t *Buf) override;
 
 protected:
   std::vector<ObjectFile *> &InputObjects;
@@ -332,6 +262,79 @@ protected:
   std::string DataSectionHeader;
   size_t BodySize;
 };
+
+DataSection::DataSection(uint32_t NumDataSegments,
+                         std::vector<ObjectFile *> &Objs)
+    : OutputSection(WASM_SEC_DATA), InputObjects(Objs), BodySize(0) {
+  raw_string_ostream OS(DataSectionHeader);
+  writeUleb128(OS, NumDataSegments, "data segment count");
+  OS.flush();
+  BodySize = DataSectionHeader.size();
+
+  uint32_t NumRelocations = 0;
+
+  for (ObjectFile *File : Symtab->ObjectFiles) {
+    if (!File->DataSection)
+      continue;
+    NumRelocations += File->DataSection->Relocations.size();
+    assert(File->getWasmObj()->dataSegments().size() <= 1);
+    // uint32_t DataSectionOffset = BodySize - DataSectionHeader.size();
+    for (const object::WasmSegment &Segment :
+         File->getWasmObj()->dataSegments()) {
+      std::string SegmentHeader;
+      raw_string_ostream OS(SegmentHeader);
+      writeUleb128(OS, Segment.Data.MemoryIndex, "memory index");
+      writeUleb128(OS, WASM_OPCODE_I32_CONST, "opcode:i32const");
+      uint32_t NewOffset = Segment.Data.Offset.Value.Int32 + File->DataOffset;
+      writeSleb128(OS, NewOffset, "memory offset");
+      writeUleb128(OS, WASM_OPCODE_END, "opcode:end");
+      writeUleb128(OS, Segment.Data.Content.size(), "segment size");
+      OS.flush();
+      BodySize += SegmentHeader.size();
+
+      log("Data segment: size=" + Twine(Segment.Data.Content.size()));
+      calcRelocations(*File, File->DataSection->Relocations, Relocations,
+                      BodySize - Segment.SectionOffset, Segment.SectionOffset,
+                      Segment.SectionOffset + Segment.Data.Content.size());
+      BodySize += Segment.Data.Content.size();
+      OutputSegments.emplace_back(SegmentHeader, &Segment);
+    }
+  }
+
+  log("NumRelocations: " + Twine(NumRelocations));
+  assert(Relocations.size() == NumRelocations);
+
+  createHeader(BodySize);
+}
+
+void DataSection::writeTo(uint8_t *Buf) {
+  log("writing " + toString(this));
+  log(" size=" + Twine(getSize()) + " body=" + Twine(BodySize));
+  Buf += Offset;
+
+  // Write section header
+  memcpy(Buf, Header.data(), Header.size());
+  Buf += Header.size();
+
+  uint8_t *ContentsStart = Buf;
+
+  // Write code section headers
+  memcpy(Buf, DataSectionHeader.data(), DataSectionHeader.size());
+  Buf += DataSectionHeader.size();
+
+  for (OutputDataSegment &Segment : OutputSegments) {
+    // Write segment header
+    memcpy(Buf, Segment.Header.data(), Segment.Header.size());
+    Buf += Segment.Header.size();
+
+    // Data data payload
+    const ArrayRef<uint8_t> &Content(Segment.Segment->Data.Content);
+    memcpy(Buf, Content.data(), Content.size());
+    Buf += Content.size();
+  }
+
+  applyRelocations(ContentsStart, Relocations, 0);
+}
 
 std::string toString(OutputSection *Section) {
   std::string rtn = "section: ";
@@ -465,8 +468,7 @@ static const char *sectionTypeToString(uint32_t SectionType) {
 // space of the input file.  This function takes a relocation and returns the
 // relocated index (i.e. translates from the input index space to the output
 // index space).
-static uint32_t calcNewIndex(const ObjectFile &File,
-                             const WasmRelocation &Reloc) {
+static uint32_t calcNewIndex(ObjectFile &File, const WasmRelocation &Reloc) {
   uint32_t NewIndex = 0;
   switch (Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
@@ -492,10 +494,10 @@ static uint32_t calcNewIndex(const ObjectFile &File,
   return NewIndex;
 }
 
-// Take an vector of relocations from an input file and create output
-// relocations based on them. Calculats the updated index and offset for
+// Take a vector of relocations from an input file and create output
+// relocations based on them. Calculates the updated index and offset for
 // each relocation as well as the value to write out in the final binary.
-static void calcRelocations(const ObjectFile &File,
+static void calcRelocations(ObjectFile &File,
                             const std::vector<WasmRelocation> &Relocs,
                             std::vector<OutputRelocation> &OutputRelocs,
                             uint32_t OutputOffset, uint32_t Start,
@@ -529,7 +531,7 @@ static void calcRelocations(const ObjectFile &File,
   }
 }
 
-static void applyRelocation(uint8_t* Buf, const OutputRelocation &Reloc) {
+static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
   DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
                << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
                << " offset=" << Reloc.Reloc.Offset << "\n");
@@ -676,8 +678,8 @@ void Writer::createGlobalSection() {
   }
 
   if (Config->Relocatable) {
-    for (ObjectFile *File : Symtab->ObjectFiles) {
-      uint32_t GlobalIndex = File->GlobalImports.size();
+    for (const ObjectFile *File : Symtab->ObjectFiles) {
+      uint32_t GlobalIndex = File->NumGlobalImports();
       for (const WasmGlobal &Global : File->getWasmObj()->globals()) {
         WasmGlobal RelocatedGlobal(Global);
         if (Global.Type != WASM_TYPE_I32)
@@ -760,7 +762,8 @@ void Writer::createExportSection() {
         Symbol *ExportAs = Symtab->find(Config->ExportEntryAs);
         if (ExportAs && ExportAs->isDefined()) {
           warn("can't export entry point");
-          fatal("already an existing exported symbol: " + Config->ExportEntryAs);
+          fatal("already an existing exported symbol: " +
+                Config->ExportEntryAs);
         }
         WasmExport MainExport;
         MainExport.Name = Config->ExportEntryAs;
@@ -931,7 +934,7 @@ void Writer::createNameSection() {
         if (!NameOrError)
           fatal("error getting symbol name");
         writeUleb128(OS, File->relocateFunctionIndex(Sym.getValue()),
-                      "func index");
+                     "func index");
         writeStr(OS, *NameOrError, "symbol name");
       }
     }
@@ -1045,13 +1048,13 @@ void Writer::calculateOffsets() {
 
     // Function Index
     File->FunctionIndexOffset =
-        FunctionImports.size() - File->FunctionImports.size() + NumFunctions;
+        FunctionImports.size() - File->NumFunctionImports() + NumFunctions;
     NumFunctions += WasmFile->functions().size();
 
     // Global Index
     if (Config->Relocatable) {
       File->GlobalIndexOffset =
-          GlobalImports.size() - File->GlobalImports.size() + NumGlobals;
+          GlobalImports.size() - File->NumGlobalImports() + NumGlobals;
       NumGlobals += WasmFile->globals().size();
     }
 

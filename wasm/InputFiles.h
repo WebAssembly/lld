@@ -89,30 +89,36 @@ public:
   void parse() override;
 
   // Returns the underlying wasm file.
-  const WasmObjectFile *getWasmObj() { return WasmObj.get(); }
+  const WasmObjectFile *getWasmObj() const { return WasmObj.get(); }
 
   void dumpInfo() const;
 
-  uint32_t relocateTypeIndex(uint32_t original) const;
-  uint32_t relocateFunctionIndex(uint32_t original) const;
-  uint32_t relocateGlobalIndex(uint32_t original) const;
-  uint32_t relocateTableIndex(uint32_t original) const;
-  uint32_t relocateDataLocation(uint32_t original) const;
+  uint32_t relocateTypeIndex(uint32_t Original) const;
+  uint32_t relocateFunctionIndex(uint32_t Original);
+  uint32_t relocateGlobalIndex(uint32_t Original);
+  uint32_t relocateTableIndex(uint32_t Original) const;
+  uint32_t relocateDataLocation(uint32_t Original) const;
 
-  int32_t getGlobalAddress(uint32_t index) const;
+  int32_t getGlobalAddress(uint32_t Index) const;
 
   // Returns true if the given function index is an imported function,
   // as opposed to the locally defined function.
-  bool isImportedFunction(uint32_t index) const;
+  bool isImportedFunction(uint32_t Index) const;
+
   // Returns true if the given global index is an imported global,
   // as opposed to the locally defined (exported) global.
-  bool isImportedGlobal(uint32_t index) const;
+  bool isImportedGlobal(uint32_t Index) const;
+
   // Return true if the given imported (undefined) function has been resolved
   // in the output binary (i.e. defined by another object).
-  bool isResolvedFunctionImport(uint32_t index) const;
+  bool isResolvedFunctionImport(uint32_t Index);
+
   // Return true if the given imported (undefined) global has been resolved
   // in the output binary (i.e. defined by another object).
-  bool isResolvedGlobalImport(uint32_t index) const;
+  bool isResolvedGlobalImport(uint32_t Index);
+
+  size_t NumFunctionImports() const { return FunctionImports.size(); }
+  size_t NumGlobalImports() const { return GlobalImports.size(); }
 
   int32_t FunctionIndexOffset = 0;
   int32_t GlobalIndexOffset = 0;
@@ -122,11 +128,21 @@ public:
   const WasmSection *DataSection = nullptr;
 
   llvm::DenseMap<uint32_t, uint32_t> TypeMap;
+
+private:
   std::vector<StringRef> FunctionImports;
   std::vector<StringRef> GlobalImports;
 
-private:
+  const Symbol *getFunctionSymbol(uint32_t Index);
+  const Symbol *getGlobalSymbol(uint32_t Index);
+
   std::unique_ptr<WasmObjectFile> WasmObj;
+
+  // List of all function symbols indexed by the function index space
+  std::vector<const Symbol *> FunctionSymbols;
+
+  // List of all global symbols indexed by the global index space
+  std::vector<const Symbol *> GlobalSymbols;
 
   void initializeSymbols();
 };
@@ -137,6 +153,7 @@ llvm::Optional<MemoryBufferRef> readFile(StringRef Path);
 } // namespace wasm
 
 std::string toString(wasm::InputFile *File);
+
 } // namespace lld
 
 #endif

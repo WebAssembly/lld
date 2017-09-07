@@ -49,37 +49,49 @@ Optional<MemoryBufferRef> readFile(StringRef Path) {
 void ObjectFile::dumpInfo() const {
   log("reloc info for: " + getName() + "\n" +
       "        FunctionIndexOffset : " + Twine(FunctionIndexOffset) + "\n" +
-      "     FunctionImports.size() : " + Twine(FunctionImports.size()) + "\n" +
+      "         NumFunctionImports : " + Twine(NumFunctionImports()) + "\n" +
       "           TableIndexOffset : " + Twine(TableIndexOffset) + "\n" +
       "          GlobalIndexOffset : " + Twine(GlobalIndexOffset) + "\n" +
       "                 DataOffset : " + Twine(DataOffset) + "\n" +
-      "       GlobalImports.size() : " + Twine(GlobalImports.size()) + "\n");
+      "           NumGlobalImports : " + Twine(NumGlobalImports()) + "\n");
 }
 
 bool ObjectFile::isImportedFunction(uint32_t Index) const {
-  return Index < FunctionImports.size();
+  return Index < NumFunctionImports();
 }
 
 bool ObjectFile::isImportedGlobal(uint32_t Index) const {
-  return Index < GlobalImports.size();
+  return Index < NumGlobalImports();
 }
 
-bool ObjectFile::isResolvedFunctionImport(uint32_t Index) const {
+const Symbol *ObjectFile::getFunctionSymbol(uint32_t Index) {
+  assert(isImportedFunction(Index));
+  if (FunctionSymbols[Index] == nullptr) {
+    StringRef Name = FunctionImports[Index];
+    FunctionSymbols[Index] = Symtab->find(Name);
+  }
+  return FunctionSymbols[Index];
+}
+
+const Symbol *ObjectFile::getGlobalSymbol(uint32_t Index) {
+  assert(isImportedGlobal(Index));
+  if (GlobalSymbols[Index] == nullptr) {
+    StringRef Name = GlobalImports[Index];
+    FunctionSymbols[Index] = Symtab->find(Name);
+  }
+  return GlobalSymbols[Index];
+}
+
+bool ObjectFile::isResolvedFunctionImport(uint32_t Index) {
   if (!isImportedFunction(Index))
     return false;
-  StringRef Name = FunctionImports[Index];
-  Symbol *Sym = Symtab->find(Name);
-  assert(Sym);
-  return Sym->isDefined();
+  return getFunctionSymbol(Index)->isDefined();
 }
 
-bool ObjectFile::isResolvedGlobalImport(uint32_t Index) const {
+bool ObjectFile::isResolvedGlobalImport(uint32_t Index) {
   if (!isImportedGlobal(Index))
     return false;
-  StringRef Name = GlobalImports[Index];
-  Symbol *Sym = Symtab->find(Name);
-  assert(Sym);
-  return Sym->isDefined();
+  return getGlobalSymbol(Index)->isDefined();
 }
 
 int32_t ObjectFile::getGlobalAddress(uint32_t Index) const {
@@ -91,14 +103,10 @@ int32_t ObjectFile::getGlobalAddress(uint32_t Index) const {
   return Global.InitExpr.Value.Int32 + DataOffset;
 }
 
-uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) const {
+uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) {
   DEBUG(dbgs() << "relocateFunctionIndex: " << Original << "\n");
-  if (isImportedFunction(Original)) {
-    StringRef Name = FunctionImports[Original];
-    Symbol *Sym = Symtab->find(Name);
-    assert(Sym && "imported symbol not found in symbol table");
-    return Sym->getOutputIndex();
-  }
+  if (isImportedFunction(Original))
+    return getFunctionSymbol(Original)->getOutputIndex();
 
   DEBUG(dbgs() << " -> " << FunctionIndexOffset << " "
                << (Original + FunctionIndexOffset) << "\n");
@@ -114,13 +122,9 @@ uint32_t ObjectFile::relocateTableIndex(uint32_t Original) const {
   return Original + TableIndexOffset;
 }
 
-uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) const {
-  if (isImportedGlobal(Original)) {
-    StringRef Name = GlobalImports[Original];
-    Symbol *Sym = Symtab->find(Name);
-    assert(Sym && "imported symbol not found in symbol table");
-    return Sym->getOutputIndex();
-  }
+uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) {
+  if (isImportedGlobal(Original))
+    return getGlobalSymbol(Original)->getOutputIndex();
 
   return Original + GlobalIndexOffset;
 }
@@ -165,6 +169,9 @@ void ObjectFile::initializeSymbols() {
       break;
     }
   }
+
+  FunctionSymbols.resize(FunctionImports.size());
+  GlobalSymbols.resize(GlobalImports.size());
 
   for (const SymbolRef &Sym : WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
@@ -218,13 +225,20 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
 
   DEBUG(dbgs() << "loading lazy: " << displayName(Sym->getName()) << "\n");
   DEBUG(dbgs() << "from archive: " << toString(this) << "\n");
-  // DEBUG(dbgs() << "loading symbol from object symbol: " << C.getName() <<
-  // "\n");
+
   MemoryBufferRef MB =
       check(C.getMemoryBufferRef(),
             "could not get the buffer for the member defining symbol " +
                 Sym->getName());
-  Driver->addArchiveBuffer(MB, Sym->getName(), ParentName);
+
+  if (identify_magic(MB.getBuffer()) != file_magic::wasm_object) {
+    error("unknown file type: " + MB.getBufferIdentifier());
+    return;
+  }
+
+  InputFile *Obj = make<ObjectFile>(MB);
+  Obj->ParentName = ParentName;
+  Symtab->addFile(Obj);
 }
 
 } // namespace wasm

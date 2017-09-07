@@ -19,10 +19,6 @@
 
 using llvm::object::WasmSymbol;
 
-namespace llvm {
-struct LTOCodeGenerator;
-}
-
 namespace lld {
 namespace wasm {
 

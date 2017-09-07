@@ -70,14 +70,13 @@ void writeData(raw_ostream &OS, const StringRef String, const char *msg) {
 
 void writeStr(raw_ostream &OS, const StringRef String, const char *msg) {
   if (msg)
-    debugWrite(OS.tell(), msg + formatv(" [str[{0}]: {1}]", String.size(), String));
+    debugWrite(OS.tell(),
+               msg + formatv(" [str[{0}]: {1}]", String.size(), String));
   writeUleb128(OS, String.size(), nullptr);
   writeBytes(OS, String.data(), String.size());
 }
 
-void writeU8(raw_ostream &OS, uint8_t byte, const char *msg) {
-  OS << byte;
-}
+void writeU8(raw_ostream &OS, uint8_t byte, const char *msg) { OS << byte; }
 
 void writeU32(raw_ostream &OS, uint32_t Number, const char *msg) {
   debugWrite(OS.tell(), msg + formatv("[{0:x}]", Number));

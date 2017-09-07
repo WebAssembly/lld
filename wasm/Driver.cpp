@@ -86,10 +86,10 @@ static uint64_t getZOptionValue(opt::InputArgList &Args, StringRef Key,
     size_t Pos = Value.find("=");
     if (Pos != StringRef::npos && Key == Value.substr(0, Pos)) {
       Value = Value.substr(Pos + 1);
-      uint64_t Result;
-      if (Value.getAsInteger(0, Result))
+      uint64_t Res;
+      if (Value.getAsInteger(0, Res))
         error("invalid " + Key + ": " + Value);
-      return Result;
+      return Res;
     }
   }
   return Default;
@@ -106,15 +106,6 @@ static std::vector<StringRef> getLines(MemoryBufferRef MB) {
       Ret.push_back(S);
   }
   return Ret;
-}
-
-static std::vector<StringRef> parseUndefinedFile(StringRef Filename) {
-  std::vector<StringRef> Result;
-  Optional<MemoryBufferRef> Buffer = readFile(Filename);
-  if (Buffer.hasValue())
-    for (StringRef SymbolName : getLines(*Buffer))
-      Result.push_back(SymbolName);
-  return Result;
 }
 
 // Parse -color-diagnostics={auto,always,never} or -no-color-diagnostics.
@@ -138,8 +129,7 @@ static bool getColorDiagnostics(opt::InputArgList &Args) {
   return false;
 }
 
-// Find a file by concatenating given paths. If a resulting path
-// starts with "=", the character is replaced with a --sysroot value.
+// Find a file by concatenating given paths.
 static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
   SmallString<128> S;
   path::append(S, Path1, Path2);
@@ -201,19 +191,6 @@ void LinkerDriver::addFile(StringRef Path) {
     Files.push_back(make<ArchiveFile>(MBRef));
   else
     Files.push_back(make<ObjectFile>(MBRef));
-}
-
-void LinkerDriver::addArchiveBuffer(MemoryBufferRef MB, StringRef SymName,
-                                    StringRef ParentName) {
-  if (identify_magic(MB.getBuffer()) != file_magic::wasm_object) {
-    error("unknown file type: " + MB.getBufferIdentifier());
-    return;
-  }
-
-  InputFile *Obj = make<ObjectFile>(MB);
-  Obj->ParentName = ParentName;
-  Symtab->addFile(Obj);
-  log("Including " + toString(Obj) + " for: " + SymName);
 }
 
 // Add a given library by searching it from input search paths.
@@ -290,8 +267,9 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   StringRef AllowUndefinedFilename =
       Args.getLastArgValue(OPT_allow_undefined_file);
   if (!AllowUndefinedFilename.empty())
-    for (StringRef S : parseUndefinedFile(AllowUndefinedFilename))
-      Config->AllowUndefinedSymbols.insert(S);
+    if (Optional<MemoryBufferRef> Buf = readFile(AllowUndefinedFilename))
+      for (StringRef Sym : getLines(*Buf))
+        Config->AllowUndefinedSymbols.insert(Sym);
 
   if (Config->OutputFile.empty())
     fatal("no output file specified");
@@ -300,7 +278,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     fatal("no input files");
 
   if (Config->Relocatable && !Config->Entry.empty())
-    fatal("entry point specified for relocatable output file");
+    error("entry point specified for relocatable output file");
 
   if (!Config->Relocatable) {
     if (Config->Entry.empty())
