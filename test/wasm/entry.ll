@@ -17,6 +17,6 @@ entry:
 ; CHECK:       - Name:            memory
 ; CHECK:         Kind:            MEMORY
 ; CHECK:         Index:           0
-; CHECK:       - Name:            main
+; CHECK:       - Name:            entry
 ; CHECK:         Kind:            FUNCTION
 ; CHECK:         Index:           0

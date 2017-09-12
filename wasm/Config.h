@@ -41,7 +41,6 @@ struct Configuration {
   llvm::StringRef Entry;
   llvm::StringRef Sysroot;
   llvm::StringRef OutputFile;
-  llvm::StringRef ExportEntryAs = "main";
 
   std::vector<llvm::StringRef> SearchPaths;
   std::set<llvm::StringRef> AllowUndefinedSymbols;

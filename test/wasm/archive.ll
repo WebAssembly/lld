@@ -22,4 +22,3 @@ entry:
 ; CHECK: t _start
 ; CHECK: t bar
 ; CHECK: t foo
-; CHECK: T main
