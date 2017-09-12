@@ -31,6 +31,8 @@ def heap    : P<"heap", "Size of the heap">;
 def implib  : P<"implib", "Import library name">;
 def libpath : P<"libpath", "Additional library search path">;
 def linkrepro : P<"linkrepro", "Dump linker invocation and input files for debugging">;
+def lldltocache : P<"lldltocache", "Path to ThinLTO cached object file directory">;
+def lldltocachepolicy : P<"lldltocachepolicy", "Pruning policy for the ThinLTO cache">;
 def lldsavetemps : F<"lldsavetemps">,
     HelpText<"Save temporary files instead of deleting them">;
 def machine : P<"machine", "Specify target platform">;
@@ -101,6 +103,8 @@ def help_q : Flag<["/?", "-?"], "">, Alias<help>;
 def nopdb : F<"nopdb">, HelpText<"Disable PDB generation for DWARF users">;
 def nosymtab : F<"nosymtab">;
 def msvclto : F<"msvclto">;
+def rsp_quoting : Joined<["--"], "rsp-quoting=">,
+  HelpText<"Quoting style for response files, 'windows' (default) or 'posix'">;
 
 // Flags for debugging
 def lldmap : F<"lldmap">;
@@ -131,6 +135,7 @@ def errorreport : QF<"errorreport">;
 def idlout : QF<"idlout">;
 def ignore : QF<"ignore">;
 def maxilksize : QF<"maxilksize">;
+def natvis : QF<"natvis">;
 def pdbaltpath : QF<"pdbaltpath">;
 def tlbid : QF<"tlbid">;
 def tlbout : QF<"tlbout">;

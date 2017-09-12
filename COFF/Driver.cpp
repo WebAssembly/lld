@@ -202,6 +202,7 @@ static bool isDecorated(StringRef Sym) {
 // specified by /defaultlib.
 void LinkerDriver::parseDirectives(StringRef S) {
   ArgParser Parser;
+  // .drectve is always tokenized using Windows shell rules.
   opt::InputArgList Args = Parser.parse(S);
 
   for (auto *Arg : Args) {
@@ -240,6 +241,7 @@ void LinkerDriver::parseDirectives(StringRef S) {
     case OPT_editandcontinue:
     case OPT_fastfail:
     case OPT_guardsym:
+    case OPT_natvis:
     case OPT_throwingnew:
       break;
     default:
@@ -839,7 +841,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
         Config->DoICF = false;
         continue;
       }
-      if (S == "icf" || StringRef(S).startswith("icf=")) {
+      if (S == "icf" || S.startswith("icf=")) {
         Config->DoICF = true;
         continue;
       }
@@ -847,21 +849,21 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
         Config->DoICF = false;
         continue;
       }
-      if (StringRef(S).startswith("lldlto=")) {
-        StringRef OptLevel = StringRef(S).substr(7);
+      if (S.startswith("lldlto=")) {
+        StringRef OptLevel = S.substr(7);
         if (OptLevel.getAsInteger(10, Config->LTOOptLevel) ||
             Config->LTOOptLevel > 3)
           error("/opt:lldlto: invalid optimization level: " + OptLevel);
         continue;
       }
-      if (StringRef(S).startswith("lldltojobs=")) {
-        StringRef Jobs = StringRef(S).substr(11);
+      if (S.startswith("lldltojobs=")) {
+        StringRef Jobs = S.substr(11);
         if (Jobs.getAsInteger(10, Config->LTOJobs) || Config->LTOJobs == 0)
           error("/opt:lldltojobs: invalid job count: " + Jobs);
         continue;
       }
-      if (StringRef(S).startswith("lldltopartitions=")) {
-        StringRef N = StringRef(S).substr(17);
+      if (S.startswith("lldltopartitions=")) {
+        StringRef N = S.substr(17);
         if (N.getAsInteger(10, Config->LTOPartitions) ||
             Config->LTOPartitions == 0)
           error("/opt:lldltopartitions: invalid partition count: " + N);
@@ -875,6 +877,16 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Handle /lldsavetemps
   if (Args.hasArg(OPT_lldsavetemps))
     Config->SaveTemps = true;
+
+  // Handle /lldltocache
+  if (auto *Arg = Args.getLastArg(OPT_lldltocache))
+    Config->LTOCache = Arg->getValue();
+
+  // Handle /lldsavecachepolicy
+  if (auto *Arg = Args.getLastArg(OPT_lldltocachepolicy))
+    Config->LTOCachePolicy = check(
+        parseCachePruningPolicy(Arg->getValue()),
+        Twine("/lldltocachepolicy: invalid cache policy: ") + Arg->getValue());
 
   // Handle /failifmismatch
   for (auto *Arg : Args.filtered(OPT_failifmismatch))
