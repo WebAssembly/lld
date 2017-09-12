@@ -69,6 +69,7 @@ const Symbol *ObjectFile::getFunctionSymbol(uint32_t Index) {
   if (FunctionSymbols[Index] == nullptr) {
     StringRef Name = FunctionImports[Index];
     FunctionSymbols[Index] = Symtab->find(Name);
+    assert(FunctionSymbols[Index]);
   }
   return FunctionSymbols[Index];
 }
@@ -77,7 +78,8 @@ const Symbol *ObjectFile::getGlobalSymbol(uint32_t Index) {
   assert(isImportedGlobal(Index));
   if (GlobalSymbols[Index] == nullptr) {
     StringRef Name = GlobalImports[Index];
-    FunctionSymbols[Index] = Symtab->find(Name);
+    GlobalSymbols[Index] = Symtab->find(Name);
+    assert(GlobalSymbols[Index]);
   }
   return GlobalSymbols[Index];
 }
@@ -94,9 +96,9 @@ bool ObjectFile::isResolvedGlobalImport(uint32_t Index) {
   return getGlobalSymbol(Index)->isDefined();
 }
 
-int32_t ObjectFile::getGlobalAddress(uint32_t Index) const {
+int32_t ObjectFile::getGlobalAddress(uint32_t Index) {
   if (isImportedGlobal(Index))
-    return 0;
+    return getGlobalSymbol(Index)->getMemoryAddress();
 
   const WasmGlobal &Global = WasmObj->globals()[Index - GlobalImports.size()];
   assert(Global.Type == WASM_TYPE_I32);

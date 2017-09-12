@@ -67,6 +67,7 @@ public:
   uint32_t getFunctionIndex() const;
   uint32_t getFunctionTypeIndex() const;
   uint32_t getOutputIndex() const;
+  uint32_t getMemoryAddress() const;
 
   bool hasOutputIndex() { return OutputIndex.hasValue(); }
 

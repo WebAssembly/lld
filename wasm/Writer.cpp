@@ -485,7 +485,7 @@ static uint32_t calcNewIndex(ObjectFile &File, const WasmRelocation &Reloc) {
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    NewIndex = File.getGlobalAddress(Reloc.Index);
+    NewIndex = File.relocateGlobalIndex(Reloc.Index);
     break;
   default:
     fatal("unhandled relocation type: " + Twine(Reloc.Type));
@@ -678,7 +678,7 @@ void Writer::createGlobalSection() {
   }
 
   if (Config->Relocatable) {
-    for (const ObjectFile *File : Symtab->ObjectFiles) {
+    for (ObjectFile *File : Symtab->ObjectFiles) {
       uint32_t GlobalIndex = File->NumGlobalImports();
       for (const WasmGlobal &Global : File->getWasmObj()->globals()) {
         WasmGlobal RelocatedGlobal(Global);

@@ -59,6 +59,15 @@ const WasmExport &Symbol::getExport() const {
   return Obj->getWasmObj()->exports()[Sym->ElementIndex];
 }
 
+uint32_t Symbol::getMemoryAddress() const {
+  if (isUndefined())
+    return 0;
+  assert(Sym != nullptr);
+  assert(isa<ObjectFile>(File));
+  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
+  return Obj->getGlobalAddress(getGlobalIndex());
+}
+
 uint32_t Symbol::getOutputIndex() const {
   if (isUndefined() && isWeak())
     return 0;
