@@ -277,8 +277,6 @@ DataSection::DataSection(uint32_t NumDataSegments,
     if (!File->DataSection)
       continue;
     NumRelocations += File->DataSection->Relocations.size();
-    assert(File->getWasmObj()->dataSegments().size() <= 1);
-    // uint32_t DataSectionOffset = BodySize - DataSectionHeader.size();
     for (const object::WasmSegment &Segment :
          File->getWasmObj()->dataSegments()) {
       std::string SegmentHeader;
@@ -506,7 +504,7 @@ static void calcRelocations(ObjectFile &File,
   for (const WasmRelocation &Reloc : Relocs) {
     int64_t NewIndex = calcNewIndex(File, Reloc);
     if (Start && End) {
-      if (Reloc.Offset < Start && Reloc.Offset >= End)
+      if (Reloc.Offset < Start || Reloc.Offset >= End)
         continue;
     }
     OutputRelocation NewReloc;
