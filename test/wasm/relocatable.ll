@@ -110,20 +110,26 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         Offset:          0x00000012
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_TABLE_INDEX_I32
 ; CHECK-NEXT:         Index:           1
-; CHECK-NEXT:         Offset:          0x00000016
+; CHECK-NEXT:         Offset:          0x0000001B
 ; CHECK-NEXT:     Segments:        
-; CHECK-NEXT:       - SectionOffset:     6
-; CHECK-NEXT:         MemoryIndex:       0
+; CHECK-NEXT:       - SectionOffset:   6
+; CHECK-NEXT:         MemoryIndex:     0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
 ; CHECK-NEXT:         Content:         68656C6C6F0A00
-; CHECK-NEXT:       - SectionOffset:     18
-; CHECK-NEXT:         MemoryIndex:       0
-; CHECK-NEXT:         Offset:
+; CHECK-NEXT:       - SectionOffset:   18
+; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           8
-; CHECK-NEXT:         Content:         '0000000001000000'
+; CHECK-NEXT:         Content:         '00000000'
+; CHECK-NEXT:       - SectionOffset:   27
+; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           12
+; CHECK-NEXT:         Content:         '01000000'
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        16

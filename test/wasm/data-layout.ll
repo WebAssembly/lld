@@ -39,16 +39,28 @@ target triple = "wasm32-unknown-unknown-wasm"
 ; CHECK-NEXT:     Relocations:     
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_MEMORY_ADDR_I32
 ; CHECK-NEXT:         Index:           3
-; CHECK-NEXT:         Offset:          0x0000001E
+; CHECK-NEXT:         Offset:          0x00000018
 ; CHECK-NEXT:     Segments:        
-; CHECK-NEXT:       - SectionOffset:     6
-; CHECK-NEXT:         MemoryIndex:       0
+; CHECK-NEXT:       - SectionOffset:   6
+; CHECK-NEXT:         MemoryIndex:     0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           0
-; CHECK-NEXT:         Content:         0100000000000000000000000000000003000000000000001C000000
-; CHECK-NEXT:       - SectionOffset:     39
-; CHECK-NEXT:         MemoryIndex:       0
+; CHECK-NEXT:         Content:         '01000000'
+; CHECK-NEXT:       - SectionOffset:   15
+; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           16
+; CHECK-NEXT:         Content:         '03000000'
+; CHECK-NEXT:       - SectionOffset:   24
+; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           24
+; CHECK-NEXT:         Content:         1C000000
+; CHECK-NEXT:       - SectionOffset:   33
+; CHECK-NEXT:         MemoryIndex:     0
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           28
