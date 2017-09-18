@@ -10,8 +10,10 @@
 #ifndef LLD_WASM_OUTPUT_SECTIONS_H
 #define LLD_WASM_OUTPUT_SECTIONS_H
 
-#include "WriterUtils.h"
 #include "Error.h"
+#include "InputSegment.h"
+#include "WriterUtils.h"
+#include "llvm/ADT/DenseMap.h"
 
 namespace lld {
 
@@ -20,14 +22,8 @@ std::string toString(wasm::OutputSection *Section);
 
 namespace wasm {
 
+class OutputSegment;
 class ObjectFile;
-
-struct OutputDataSegment {
-  OutputDataSegment(std::string H, const object::WasmSegment *S)
-      : Header(H), Segment(S) {}
-  std::string Header;
-  const object::WasmSegment *Segment;
-};
 
 class OutputSection {
 public:
@@ -114,14 +110,12 @@ protected:
 
 class DataSection : public OutputSection {
 public:
-  explicit DataSection(uint32_t NumDataSegments,
-                       std::vector<ObjectFile *> &Objs);
+  explicit DataSection(std::vector<OutputSegment *> &Segments);
   size_t getSize() const override { return Header.size() + BodySize; }
   void writeTo(uint8_t *Buf) override;
 
 protected:
-  std::vector<ObjectFile *> &InputObjects;
-  std::vector<OutputDataSegment> OutputSegments;
+  std::vector<OutputSegment  *> &Segments;
   std::string DataSectionHeader;
   size_t BodySize = 0;
 };

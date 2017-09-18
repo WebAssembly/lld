@@ -22,6 +22,8 @@ using llvm::object::WasmSymbol;
 namespace lld {
 namespace wasm {
 
+class InputSegment;
+
 // SymbolTable is a bucket of all known symbols, including defined,
 // undefined, or lazy symbols (the last one is symbols in archive
 // files whose archive members are not yet loaded).
@@ -46,7 +48,7 @@ public:
 
   Symbol *find(StringRef Name);
 
-  Symbol *addDefined(InputFile *F, const WasmSymbol *Sym);
+  Symbol *addDefined(InputFile *F, const WasmSymbol *Sym, const InputSegment *Segment = nullptr);
   Symbol *addUndefined(InputFile *F, const WasmSymbol *Sym);
   Symbol *addUndefinedFunction(StringRef Name);
   Symbol *addDefinedGlobal(StringRef Name);

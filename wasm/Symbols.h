@@ -23,6 +23,7 @@ namespace lld {
 namespace wasm {
 
 class InputFile;
+class InputSegment;
 
 class Symbol {
 public:
@@ -69,13 +70,14 @@ public:
 
   // Returns the virtual address of a defined global.
   // Only works for globals, not functions.
-  uint32_t getMemoryAddress() const;
+  uint32_t getVirtualAddress() const;
 
   bool hasOutputIndex() { return OutputIndex.hasValue(); }
 
   void setOutputIndex(uint32_t Index);
 
-  void update(Kind K, InputFile *F = nullptr, const WasmSymbol *Sym = nullptr);
+  void update(Kind K, InputFile *F = nullptr, const WasmSymbol *Sym = nullptr,
+              const InputSegment *Segment = nullptr);
 
   void setArchiveSymbol(const Archive::Symbol &Sym) { ArchiveSymbol = Sym; }
   const Archive::Symbol &getArchiveSymbol() { return ArchiveSymbol; }
@@ -91,6 +93,7 @@ protected:
   Kind SymbolKind = InvalidKind;
   InputFile *File = nullptr;
   const WasmSymbol *Sym = nullptr;
+  const InputSegment *Segment = nullptr;
   llvm::Optional<uint32_t> OutputIndex;
 };
 

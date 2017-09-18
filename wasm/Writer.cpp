@@ -13,6 +13,7 @@
 #include "Error.h"
 #include "Memory.h"
 #include "OutputSections.h"
+#include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Threads.h"
 #include "WriterUtils.h"
@@ -76,6 +77,7 @@ private:
   void calculateImports();
   void calculateOffsets();
   void calculateTypes();
+  void createOutputSegments();
   void layoutMemory();
   void createHeader();
   void createSections();
@@ -110,7 +112,6 @@ private:
   uint32_t NumMemoryPages = 0;
   uint32_t NumTableElems = 0;
   uint32_t NumElements = 0;
-  uint32_t NumDataSegments = 0;
   uint32_t InitialTableOffset = 0;
 
   std::vector<const WasmSignature *> Types;
@@ -123,6 +124,9 @@ private:
   std::vector<OutputSection *> OutputSections;
 
   std::unique_ptr<FileOutputBuffer> Buffer;
+
+  std::vector<OutputSegment  *> Segments;
+  llvm::SmallDenseMap<StringRef, OutputSegment *> SegmentMap;
 };
 
 } // anonymous namespace
@@ -155,8 +159,7 @@ void Writer::createImportSection() {
     Import.Module = "env";
     Import.Field = Sym->getName();
     Import.Kind = WASM_EXTERNAL_FUNCTION;
-    assert(isa<ObjectFile>(Sym->getFile()));
-    ObjectFile *Obj = dyn_cast<ObjectFile>(Sym->getFile());
+    ObjectFile *Obj = cast<ObjectFile>(Sym->getFile());
     Import.SigIndex = Obj->relocateTypeIndex(Sym->getFunctionTypeIndex());
     writeImport(OS, Import);
   }
@@ -376,11 +379,11 @@ void Writer::createCodeSection() {
 }
 
 void Writer::createDataSection() {
-  if (!NumDataSegments)
+  if (!Segments.size())
     return;
 
   log("createDataSection");
-  auto Section = make<DataSection>(NumDataSegments, Symtab->ObjectFiles);
+  auto Section = make<DataSection>(Segments);
   OutputSections.push_back(Section);
 }
 
@@ -418,15 +421,13 @@ void Writer::createLinkingSection() {
   DataSizeSubSection.finalizeContents();
   DataSizeSubSection.writeToStream(OS);
 
-  if (NumDataSegments && Config->Relocatable) {
+  if (Segments.size() && Config->Relocatable) {
     SubSection SubSection(WASM_SEGMENT_INFO);
-    writeUleb128(SubSection.getStream(), NumDataSegments, "num data segments");
-    for (ObjectFile *File : Symtab->ObjectFiles) {
-      for (const object::WasmSegment &S: File->getWasmObj()->dataSegments()) {
-        writeStr(SubSection.getStream(), S.Data.Name, "segment name");
-        writeUleb128(SubSection.getStream(), S.Data.Alignment, "alignment");
-        writeUleb128(SubSection.getStream(), S.Data.Flags, "flags");
-      }
+    writeUleb128(SubSection.getStream(), Segments.size(), "num data segments");
+    for (const OutputSegment *S: Segments) {
+      writeStr(SubSection.getStream(), S->Name, "segment name");
+      writeUleb128(SubSection.getStream(), S->Alignment, "alignment");
+      writeUleb128(SubSection.getStream(), 0, "flags");
     }
     SubSection.finalizeContents();
     SubSection.writeToStream(OS);
@@ -441,8 +442,6 @@ void Writer::createNameSection() {
   for (ObjectFile *File : Symtab->ObjectFiles) {
     for (Symbol *S : File->getSymbols()) {
       if (!S->isFunction() || S->isWeak())
-        continue;
-      if (File->isResolvedFunctionImport(S->getFunctionIndex()))
         continue;
       if (S->WrittenToNameSec)
         continue;
@@ -463,8 +462,6 @@ void Writer::createNameSection() {
         if (!S->isFunction() || S->isWeak())
           continue;
         if (File->isImportedFunction(S->getFunctionIndex()) != ImportedNames)
-          continue;
-        if (File->isResolvedFunctionImport(S->getFunctionIndex()))
           continue;
         if (!S->WrittenToNameSec)
           continue;
@@ -497,19 +494,14 @@ void Writer::layoutMemory() {
     debugPrint("mem: global base = %d\n", Config->GlobalBase);
   }
 
-  // Static data from input object files comes first
-  for (ObjectFile *File : Symtab->ObjectFiles) {
-    const WasmObjectFile *WasmFile = File->getWasmObj();
-    uint32_t Size = WasmFile->linkingData().DataSize;
-    if (Size) {
-      MemoryPtr = alignTo(MemoryPtr, File->DataAlignment);
-      debugPrint("mem: [%s] offset=%#x size=%d\n",
-                 File->getName().str().c_str(), File->DataOffset, Size);
-      File->DataOffset = MemoryPtr;
-      MemoryPtr += Size;
-    } else {
-      debugPrint("mem: [%s] no data\n", File->getName().str().c_str());
-    }
+  createOutputSegments();
+
+  // Static data comes first
+  for (OutputSegment *Seg : Segments) {
+    MemoryPtr = alignTo(MemoryPtr, Seg->Alignment);
+    Seg->StartVA = MemoryPtr;
+    debugPrint("mem: %-10s offset=%-8d size=%-4d align=%d\n", Seg->Name.str().c_str(), MemoryPtr, Seg->Size, Seg->Alignment);
+    MemoryPtr += Seg->Size;
   }
 
   DataSize = MemoryPtr;
@@ -620,9 +612,6 @@ void Writer::calculateOffsets() {
           NumElements += Segment.Functions.size();
       }
     }
-
-    // Data
-    NumDataSegments += WasmFile->dataSegments().size();
   }
 }
 
@@ -675,6 +664,44 @@ void Writer::assignSymbolIndexes() {
   }
 }
 
+static StringRef getOutputDataSegmentName(StringRef Name) {
+  if (Config->Relocatable)
+    return Name;
+
+  for (StringRef V :
+       {".text.", ".rodata.", ".data.rel.ro.", ".data.", ".bss.rel.ro.",
+        ".bss.", ".init_array.", ".fini_array.", ".ctors.", ".dtors.", ".tbss.",
+        ".gcc_except_table.", ".tdata.", ".ARM.exidx.", ".ARM.extab."}) {
+    StringRef Prefix = V.drop_back();
+    if (Name.startswith(V) || Name == Prefix)
+      return Prefix;
+  }
+
+  return Name;
+}
+
+void Writer::createOutputSegments() {
+  for (ObjectFile *File : Symtab->ObjectFiles) {
+    for (InputSegment *Segment : File->Segments) {
+      StringRef Name = getOutputDataSegmentName(Segment->getName());
+      OutputSegment*& S = SegmentMap[Name];
+      if (S == nullptr) {
+        DEBUG(dbgs() << "new segment: " << Name << "\n");
+        S = make<OutputSegment>(Name);
+        Segments.push_back(S);
+      }
+      S->addInputSegment(Segment);
+      DEBUG(dbgs() << "added data: " << Name << ": " << S->Size << "\n");
+      for (const WasmRelocation& R : File->DataSection->Relocations) {
+        if (R.Offset >= Segment->getInputSectionOffset() &&
+            R.Offset < Segment->getInputSectionOffset() + Segment->getSize()) {
+          Segment->Relocations.push_back(R);
+        }
+      }
+    }
+  }
+}
+
 void Writer::run() {
   if (!Config->Relocatable)
     InitialTableOffset = 1;
@@ -689,7 +716,6 @@ void Writer::run() {
   if (Config->Verbose) {
     log("NumFunctions    : " + Twine(NumFunctions));
     log("NumGlobals      : " + Twine(NumGlobals));
-    log("NumDataSegments : " + Twine(NumDataSegments));
     log("NumImports      : " +
         Twine(FunctionImports.size() + GlobalImports.size()));
     log("FunctionImports : " + Twine(FunctionImports.size()));

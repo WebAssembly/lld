@@ -70,13 +70,7 @@ entry:
 ; CHECK-NEXT:         Offset:          
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           1024
-; CHECK-NEXT:         Content:         '01000000'
-; CHECK-NEXT:       - SectionOffset:   17
-; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
-; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           1028
-; CHECK-NEXT:         Content:         '03000000'
+; CHECK-NEXT:         Content:         '0100000003000000'
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        8
@@ -88,4 +82,3 @@ entry:
 ; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         Name:            _start
 ; CHECK-NEXT: ...
-

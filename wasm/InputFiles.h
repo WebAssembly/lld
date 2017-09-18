@@ -29,6 +29,7 @@ namespace lld {
 namespace wasm {
 
 class Symbol;
+class InputSegment;
 
 class InputFile {
 public:
@@ -79,7 +80,8 @@ public:
   explicit ObjectFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
 
-  Symbol *createDefined(const WasmSymbol &Sym);
+  Symbol *createDefined(const WasmSymbol &Sym,
+                        const InputSegment *Segment = nullptr);
   Symbol *createUndefined(const WasmSymbol &Sym);
 
   void parse() override;
@@ -99,37 +101,22 @@ public:
   // as opposed to the locally defined function.
   bool isImportedFunction(uint32_t Index) const;
 
-  // Returns true if the given global index is an imported global,
-  // as opposed to the locally defined (exported) global.
-  bool isImportedGlobal(uint32_t Index) const;
-
-  // Return true if the given imported (undefined) function has been resolved
-  // in the output binary (i.e. defined by another object).
-  bool isResolvedFunctionImport(uint32_t Index) const;
-
-  // Return true if the given imported (undefined) global has been resolved
-  // in the output binary (i.e. defined by another object).
-  bool isResolvedGlobalImport(uint32_t Index) const;
-
-  uint32_t getFunctionType(uint32_t Index) const;
-
   size_t NumFunctionImports() const { return FunctionImports; }
   size_t NumGlobalImports() const { return GlobalImports; }
 
   int32_t FunctionIndexOffset = 0;
   int32_t GlobalIndexOffset = 0;
   int32_t TableIndexOffset = 0;
-  uint32_t DataOffset = 0;
-  uint32_t DataAlignment = 0;
   const WasmSection *CodeSection = nullptr;
   const WasmSection *DataSection = nullptr;
 
   std::vector<uint32_t> TypeMap;
+  std::vector<InputSegment *> Segments;
 
   const std::vector<Symbol *> &getSymbols() { return Symbols; }
-
 private:
   void initializeSymbols();
+  InputSegment* getSegment(const WasmSymbol &WasmSym);
   const Symbol *getFunctionSymbol(uint32_t Index) const;
   const Symbol *getGlobalSymbol(uint32_t Index) const;
 

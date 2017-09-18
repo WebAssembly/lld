@@ -37,3 +37,4 @@ declare i32 @ret32(float) local_unnamed_addr #1
 ; CHECK-NEXT:        Name:            ret32
 ; CHECK-NEXT:      - Index:           1
 ; CHECK-NEXT:        Name:            _start
+; CHECK-NEXT: ...

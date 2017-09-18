@@ -14,6 +14,7 @@
 #include "Memory.h"
 #include "Strings.h"
 #include "SymbolTable.h"
+#include "InputSegment.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Support/raw_ostream.h"
@@ -51,16 +52,11 @@ void ObjectFile::dumpInfo() const {
       "         NumFunctionImports : " + Twine(NumFunctionImports()) + "\n" +
       "           TableIndexOffset : " + Twine(TableIndexOffset) + "\n" +
       "          GlobalIndexOffset : " + Twine(GlobalIndexOffset) + "\n" +
-      "                 DataOffset : " + Twine(DataOffset) + "\n" +
       "           NumGlobalImports : " + Twine(NumGlobalImports()) + "\n");
 }
 
 bool ObjectFile::isImportedFunction(uint32_t Index) const {
   return Index < NumFunctionImports();
-}
-
-bool ObjectFile::isImportedGlobal(uint32_t Index) const {
-  return Index < NumGlobalImports();
 }
 
 const Symbol *ObjectFile::getFunctionSymbol(uint32_t Index) const {
@@ -71,38 +67,12 @@ const Symbol *ObjectFile::getGlobalSymbol(uint32_t Index) const {
   return GlobalSymbols[Index];
 }
 
-bool ObjectFile::isResolvedFunctionImport(uint32_t Index) const {
-  if (!isImportedFunction(Index))
-    return false;
-  return getFunctionSymbol(Index)->isDefined();
-}
-
-bool ObjectFile::isResolvedGlobalImport(uint32_t Index) const {
-  if (!isImportedGlobal(Index))
-    return false;
-  return getGlobalSymbol(Index)->isDefined();
-}
-
-uint32_t ObjectFile::getFunctionType(uint32_t Index) const {
-  return WasmObj->functionTypes()[Index];
-}
-
 uint32_t ObjectFile::getRelocatedAddress(uint32_t Index) const {
-  DEBUG(dbgs() << "getRelocatedAddress: " << Index << "\n");
-  const Symbol *Sym = getGlobalSymbol(Index);
-  if (Sym && Sym->getFile() != this)
-    return Sym->getMemoryAddress();
-
-  if (isImportedGlobal(Index))
-    return UINT32_MAX;
-
-  const WasmGlobal &Global = WasmObj->globals()[Index - NumGlobalImports()];
-  assert(Global.Type == WASM_TYPE_I32);
-  return Global.InitExpr.Value.Int32 + DataOffset;
+  return getGlobalSymbol(Index)->getVirtualAddress();
 }
 
 uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) const {
-  DEBUG(dbgs() << "relocateFunctionIndex: " << Original << "\n");
+  DEBUG(dbgs() << "relocateFunctionIndex: " << Original);
   const Symbol* Sym = getFunctionSymbol(Original);
   uint32_t Index;
   if (Sym)
@@ -123,7 +93,7 @@ uint32_t ObjectFile::relocateTableIndex(uint32_t Original) const {
 }
 
 uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) const {
-  DEBUG(dbgs() << "relocateGlobalIndex: " << Original << "\n");
+  DEBUG(dbgs() << "relocateGlobalIndex: " << Original);
   uint32_t Index;
   const Symbol *Sym = getGlobalSymbol(Original);
   if (Sym)
@@ -159,10 +129,16 @@ void ObjectFile::parse() {
       DataSection = &Section;
   }
 
-  for (const WasmSegment &Segment : WasmObj->dataSegments())
-    DataAlignment = std::max(DataAlignment, Segment.Data.Alignment);
-
   initializeSymbols();
+}
+
+InputSegment* ObjectFile::getSegment(const WasmSymbol &WasmSym) {
+  uint32_t Address = WasmObj->getWasmSymbolValue(WasmSym);
+  for (InputSegment* Segment : Segments) {
+    if (Address >= Segment->startVA() && Address < Segment->endVA())
+      return Segment;
+  }
+  assert(false && "Symbol not found in any segment");
 }
 
 void ObjectFile::initializeSymbols() {
@@ -182,6 +158,9 @@ void ObjectFile::initializeSymbols() {
   FunctionSymbols.resize(FunctionImports + WasmObj->functions().size());
   GlobalSymbols.resize(GlobalImports + WasmObj->globals().size());
 
+  for (const WasmSegment &Seg : WasmObj->dataSegments())
+    Segments.emplace_back(make<InputSegment>(&Seg, this));
+
   Symbol* S;
   for (const SymbolRef &Sym : WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
@@ -191,6 +170,8 @@ void ObjectFile::initializeSymbols() {
       S = createUndefined(WasmSym);
       break;
     case WasmSymbol::SymbolType::GLOBAL_EXPORT:
+      S = createDefined(WasmSym, getSegment(WasmSym));
+      break;
     case WasmSymbol::SymbolType::FUNCTION_EXPORT:
       S = createDefined(WasmSym);
       break;
@@ -217,7 +198,8 @@ Symbol *ObjectFile::createUndefined(const WasmSymbol &Sym) {
   return Symtab->addUndefined(this, &Sym);
 }
 
-Symbol *ObjectFile::createDefined(const WasmSymbol &Sym) {
+Symbol *ObjectFile::createDefined(const WasmSymbol &Sym,
+                                  const InputSegment *Segment) {
   Symbol* S;
   if (Sym.isLocal()) {
     S = make<Symbol>(Sym.Name);
@@ -228,10 +210,10 @@ Symbol *ObjectFile::createDefined(const WasmSymbol &Sym) {
       Kind = Symbol::Kind::DefinedGlobalKind;
     else
       llvm_unreachable("invalid local symbol type");
-    S->update(Kind, this, &Sym);
+    S->update(Kind, this, &Sym, Segment);
     return S;
   }
-  return Symtab->addDefined(this, &Sym);
+  return Symtab->addDefined(this, &Sym, Segment);
 }
 
 void ArchiveFile::parse() {

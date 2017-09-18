@@ -32,3 +32,14 @@ declare i32 @ret32(float) local_unnamed_addr #1
 ; CHECK-NEXT:        Body:            43000000001081808080001A0B
 ; CHECK-NEXT:      - Locals:
 ; CHECK-NEXT:        Body:            41000B
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            linking
+; CHECK-NEXT:     DataSize:        0
+; CHECK-NEXT:   - Type:            CUSTOM
+; CHECK-NEXT:     Name:            name
+; CHECK-NEXT:     FunctionNames:   
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         Name:            ret32
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         Name:            _start
+; CHECK-NEXT: ...

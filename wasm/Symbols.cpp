@@ -12,6 +12,7 @@
 #include "Config.h"
 #include "Error.h"
 #include "InputFiles.h"
+#include "InputSegment.h"
 #include "Strings.h"
 
 #define DEBUG_TYPE "lld"
@@ -45,12 +46,18 @@ uint32_t Symbol::getFunctionTypeIndex() const {
   return Obj->getWasmObj()->functionTypes()[FuntionIndex];
 }
 
-uint32_t Symbol::getMemoryAddress() const {
+uint32_t Symbol::getVirtualAddress() const {
   assert(isGlobal());
+  DEBUG(dbgs() << "getVirtualAddress: " << getName() << "\n");
   if (isUndefined())
     return UINT32_MAX;
+
+  assert(Sym != nullptr);
   ObjectFile *Obj = cast<ObjectFile>(File);
-  return Obj->getRelocatedAddress(getGlobalIndex());
+  const WasmGlobal &Global = Obj->getWasmObj()->globals()[getGlobalIndex() - Obj->NumGlobalImports()];
+  assert(Global.Type == llvm::wasm::WASM_TYPE_I32);
+  assert(Segment);
+  return Segment->translateVA(Global.InitExpr.Value.Int32);
 }
 
 uint32_t Symbol::getOutputIndex() const {
@@ -65,10 +72,12 @@ void Symbol::setOutputIndex(uint32_t Index) {
   OutputIndex = Index;
 }
 
-void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym) {
+void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym,
+                    const InputSegment *Seg) {
   SymbolKind = K;
   File = F;
   Sym = WasmSym;
+  Segment = Seg;
 }
 
 bool Symbol::isWeak() const { return Sym && Sym->isWeak(); }
