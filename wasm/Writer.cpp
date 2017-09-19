@@ -663,7 +663,7 @@ void Writer::createGlobalSection() {
     writeGlobal(OS, Global);
   }
 
-  if (Config->Relocatable) {
+  if (Config->Relocatable || Config->EmitRelocs) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
       uint32_t GlobalIndex = File->NumGlobalImports();
       for (const WasmGlobal &Global : File->getWasmObj()->globals()) {
@@ -1028,7 +1028,7 @@ void Writer::calculateOffsets() {
     NumFunctions += WasmFile->functions().size();
 
     // Global Index
-    if (Config->Relocatable) {
+    if (Config->Relocatable || Config->EmitRelocs) {
       File->GlobalIndexOffset =
           GlobalImports.size() - File->NumGlobalImports() + NumGlobals;
       NumGlobals += WasmFile->globals().size();

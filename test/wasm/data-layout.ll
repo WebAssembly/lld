@@ -1,6 +1,6 @@
 ; RUN: llc -filetype=obj %p/Inputs/hello.ll -o %t.hello.o
 ; RUN: llc -filetype=obj %s -o %t.o
-; RUN: lld -flavor wasm -r -o %t.wasm %t.o %t.hello.o
+; RUN: lld -flavor wasm --emit-relocs --allow-undefined -o %t.wasm %t.o %t.hello.o
 ; RUN: obj2yaml %t.wasm | FileCheck %s
 
 target datalayout = "e-m:e-p:32:32-i64:64-n32:64-S128"
@@ -13,60 +13,65 @@ target triple = "wasm32-unknown-unknown-wasm"
 @external_ref = global i8** @hello_str, align 8
 
 ; CHECK:        - Type:            GLOBAL
-; CHECK-NEXT:     Globals:         
+; CHECK-NEXT:     Globals:
 ; CHECK-NEXT:       - Type:            I32
-; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         Mutable:         true
 ; CHECK-NEXT:         InitExpr:        
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           0
+; CHECK-NEXT:           Value:           66608
 ; CHECK-NEXT:       - Type:            I32
 ; CHECK-NEXT:         Mutable:         false
-; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:         InitExpr:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           16
+; CHECK-NEXT:           Value:           1024
 ; CHECK-NEXT:       - Type:            I32
 ; CHECK-NEXT:         Mutable:         false
-; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:         InitExpr:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           24
+; CHECK-NEXT:           Value:           1040
 ; CHECK-NEXT:       - Type:            I32
 ; CHECK-NEXT:         Mutable:         false
-; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:         InitExpr:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           28
+; CHECK-NEXT:           Value:           1048
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           1052
 
 ; CHECK:       - Type:            DATA
-; CHECK-NEXT:     Relocations:     
+; CHECK-NEXT:     Relocations:
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_MEMORY_ADDR_I32
-; CHECK-NEXT:         Index:           3
-; CHECK-NEXT:         Offset:          0x00000018
-; CHECK-NEXT:     Segments:        
-; CHECK-NEXT:       - SectionOffset:   6
+; CHECK-NEXT:         Index:           4
+; CHECK-NEXT:         Offset:          0x0000001B
+; CHECK-NEXT:     Segments:
+; CHECK-NEXT:       - SectionOffset:   7
 ; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           0
+; CHECK-NEXT:           Value:           1024
 ; CHECK-NEXT:         Content:         '01000000'
-; CHECK-NEXT:       - SectionOffset:   15
+; CHECK-NEXT:       - SectionOffset:   17
 ; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           16
+; CHECK-NEXT:           Value:           1040
 ; CHECK-NEXT:         Content:         '03000000'
-; CHECK-NEXT:       - SectionOffset:   24
+; CHECK-NEXT:       - SectionOffset:   27
 ; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           24
-; CHECK-NEXT:         Content:         1C000000
-; CHECK-NEXT:       - SectionOffset:   33
+; CHECK-NEXT:           Value:           1048
+; CHECK-NEXT:         Content:         1C040000
+; CHECK-NEXT:       - SectionOffset:   37
 ; CHECK-NEXT:         MemoryIndex:     0
-; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:         Offset:
 ; CHECK-NEXT:           Opcode:          I32_CONST
-; CHECK-NEXT:           Value:           28
+; CHECK-NEXT:           Value:           1052
 ; CHECK-NEXT:         Content:         68656C6C6F0A00
 
 ; CHECK:       - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        35
-; CHECK-NEXT:     DataAlignment:   16
+; CHECK-NEXT:     DataAlignment:   0
