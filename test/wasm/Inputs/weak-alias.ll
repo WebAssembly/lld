@@ -10,4 +10,3 @@ entry:
   %call = call i32 @bar()
   ret i32 %call
 }
-

@@ -19,6 +19,6 @@ entry:
   ret i32 %call
 }
 
-; CHECK: t _start
-; CHECK: t bar
-; CHECK: t foo
+; CHECK: T _start
+; CHECK: T bar
+; CHECK: T foo

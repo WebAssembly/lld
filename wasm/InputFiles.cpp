@@ -177,6 +177,8 @@ void ObjectFile::initializeSymbols() {
 
   for (const SymbolRef &Sym : WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
+    if (WasmSym.isLocal())
+      continue;
     switch (WasmSym.Type) {
     case WasmSymbol::SymbolType::FUNCTION_IMPORT:
     case WasmSymbol::SymbolType::GLOBAL_IMPORT:
