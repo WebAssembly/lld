@@ -10,7 +10,6 @@
 #include "InputFiles.h"
 
 #include "Config.h"
-#include "Driver.h"
 #include "Error.h"
 #include "Memory.h"
 #include "Strings.h"
@@ -248,24 +247,13 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
 } // namespace wasm
 } // namespace lld
 
-// Returns the last element of a path, which is supposed to be a filename.
-static StringRef getBasename(StringRef Path) {
-  size_t Pos = Path.find_last_of("\\/");
-  if (Pos == StringRef::npos)
-    return Path;
-  return Path.substr(Pos + 1);
-}
-
-// Returns a string in the format of "foo.obj" or "foo.obj(bar.lib)".
+// Returns a string in the format of "foo.o" or "foo.a(bar.o)".
 std::string lld::toString(wasm::InputFile *File) {
   if (!File)
-    return "(internal)";
+    return "<internal>";
 
   if (File->ParentName.empty())
     return File->getName();
 
-  std::string Res =
-      (getBasename(File->ParentName) + "(" + getBasename(File->getName()) + ")")
-          .str();
-  return StringRef(Res);
+  return (File->ParentName + "(" + File->getName() + ")").str();
 }

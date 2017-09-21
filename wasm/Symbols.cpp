@@ -42,8 +42,7 @@ uint32_t Symbol::getFunctionTypeIndex() const {
 const WasmImport &Symbol::getImport() const {
   assert(isUndefined());
   assert(Sym != nullptr);
-  assert(isa<ObjectFile>(File));
-  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
+  ObjectFile *Obj = cast<ObjectFile>(File);
   assert(Sym->ElementIndex < Obj->getWasmObj()->imports().size());
   return Obj->getWasmObj()->imports()[Sym->ElementIndex];
 }
@@ -53,8 +52,7 @@ const WasmExport &Symbol::getExport() const {
                << " ElementIndex: " << Sym->ElementIndex << "\n");
   assert(isDefined());
   assert(Sym != nullptr);
-  assert(isa<ObjectFile>(File));
-  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
+  ObjectFile *Obj = cast<ObjectFile>(File);
   assert(Sym->ElementIndex < Obj->getWasmObj()->exports().size());
   return Obj->getWasmObj()->exports()[Sym->ElementIndex];
 }
@@ -63,8 +61,7 @@ uint32_t Symbol::getMemoryAddress() const {
   if (isUndefined())
     return 0;
   assert(Sym != nullptr);
-  assert(isa<ObjectFile>(File));
-  ObjectFile *Obj = dyn_cast<ObjectFile>(File);
+  ObjectFile *Obj = cast<ObjectFile>(File);
   return Obj->getGlobalAddress(getGlobalIndex());
 }
 

@@ -39,8 +39,7 @@ public:
   };
 
   Symbol(StringRef Name)
-      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name),
-        ArchiveSymbol(nullptr, 0, 0) {}
+      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name) {}
 
   Kind getKind() const { return SymbolKind; }
 
@@ -91,7 +90,7 @@ protected:
   const WasmExport &getExport() const;
 
   StringRef Name;
-  Archive::Symbol ArchiveSymbol;
+  Archive::Symbol ArchiveSymbol = {nullptr, 0, 0};
   Kind SymbolKind = InvalidKind;
   InputFile *File = nullptr;
   const WasmSymbol *Sym = nullptr;
@@ -102,11 +101,6 @@ protected:
 
 std::string toString(wasm::Symbol &Sym);
 std::string toString(wasm::Symbol::Kind &Kind);
-
-inline llvm::raw_ostream &operator<<(raw_ostream &OS, wasm::Symbol &Sym) {
-  OS << toString(Sym);
-  return OS;
-}
 
 } // namespace lld
 

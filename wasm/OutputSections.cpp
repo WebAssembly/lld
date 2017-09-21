@@ -58,14 +58,10 @@ static const char *sectionTypeToString(uint32_t SectionType) {
   }
 }
 
-std::string lld::wasm::toString(OutputSection *Section) {
-  std::string rtn = "section: ";
-  rtn += sectionTypeToString(Section->Type);
-  if (!Section->Name.empty()) {
-    rtn += "(";
-    rtn += Section->Name;
-    rtn += ")";
-  }
+std::string lld::toString(OutputSection *Section) {
+  std::string rtn = sectionTypeToString(Section->Type);
+  if (!Section->Name.empty())
+    rtn += "(" + Section->Name + ")";
   return rtn;
 };
 
@@ -74,36 +70,28 @@ std::string lld::wasm::toString(OutputSection *Section) {
 // relocated index (i.e. translates from the input index space to the output
 // index space).
 static uint32_t calcNewIndex(ObjectFile &File, const WasmRelocation &Reloc) {
-  uint32_t NewIndex = 0;
   switch (Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
-    NewIndex = File.relocateTypeIndex(Reloc.Index);
-    break;
+    return File.relocateTypeIndex(Reloc.Index);
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
-    NewIndex = File.relocateFunctionIndex(Reloc.Index);
-    break;
+    return File.relocateFunctionIndex(Reloc.Index);
   case R_WEBASSEMBLY_TABLE_INDEX_I32:
   case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-    NewIndex = File.relocateTableIndex(Reloc.Index);
-    break;
+    return File.relocateTableIndex(Reloc.Index);
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    NewIndex = File.relocateGlobalIndex(Reloc.Index);
-    break;
+    return File.relocateGlobalIndex(Reloc.Index);
   default:
-    fatal("unhandled relocation type: " + Twine(Reloc.Type));
-    break;
+    llvm_unreachable("unknown relocation type");
   }
-  return NewIndex;
 }
 
 // Take a vector of relocations from an input file and create output
 // relocations based on them. Calculates the updated index and offset for
 // each relocation as well as the value to write out in the final binary.
-static void calcRelocations(ObjectFile &File,
-                            const std::vector<WasmRelocation> &Relocs,
+static void calcRelocations(ObjectFile &File, ArrayRef<WasmRelocation> Relocs,
                             std::vector<OutputRelocation> &OutputRelocs,
                             uint32_t OutputOffset, uint32_t Start = 0,
                             uint32_t End = 0) {
@@ -140,39 +128,27 @@ static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
   DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
                << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
                << " offset=" << Reloc.Reloc.Offset << "\n");
-  RelocEncoding Encoding;
   switch (Reloc.Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
     assert(decodeULEB128(Buf) == Reloc.Reloc.Index);
+    LLVM_FALLTHROUGH;
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
-    Encoding = RelocEncoding::Uleb128;
+    encodeULEB128(Reloc.Value, Buf, 5);
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
     assert(decodeSLEB128(Buf) == Reloc.Reloc.Index);
+    LLVM_FALLTHROUGH;
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
-    Encoding = RelocEncoding::Sleb128;
+    encodeSLEB128(Reloc.Value, Buf, 5);
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_I32:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
-    Encoding = RelocEncoding::I32;
-    break;
-  }
-
-  // Encode the new value
-  switch (Encoding) {
-  case RelocEncoding::Uleb128: {
-    encodeULEB128(Reloc.Value, Buf, 5);
-    break;
-  }
-  case RelocEncoding::Sleb128: {
-    encodeSLEB128(Reloc.Value, Buf, 5);
-    break;
-  }
-  case RelocEncoding::I32:
     support::endian::write32<support::little>(Buf, Reloc.Value);
     break;
+  default:
+    llvm_unreachable("unknown relocation type");
   }
 }
 
@@ -198,7 +174,7 @@ void OutputSection::createHeader(size_t BodySize) {
 }
 
 CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
-    : OutputSection(WASM_SEC_CODE), InputObjects(Objs), BodySize(0) {
+    : OutputSection(WASM_SEC_CODE), InputObjects(Objs) {
   raw_string_ostream OS(CodeSectionHeader);
   writeUleb128(OS, NumFunctions, "function count");
   OS.flush();
@@ -210,7 +186,7 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
       continue;
 
     NumRelocations += File->CodeSection->Relocations.size();
-    const ArrayRef<uint8_t> Content = File->CodeSection->Content;
+    ArrayRef<uint8_t> Content = File->CodeSection->Content;
     unsigned HeaderSize = 0;
     decodeULEB128(Content.data(), &HeaderSize);
 
@@ -246,7 +222,7 @@ void CodeSection::writeTo(uint8_t *Buf) {
     if (!File->CodeSection)
       continue;
 
-    const ArrayRef<uint8_t> &Content(File->CodeSection->Content);
+    ArrayRef<uint8_t> Content(File->CodeSection->Content);
 
     // Payload doesn't include the initial header (function count)
     unsigned HeaderSize = 0;
@@ -263,7 +239,7 @@ void CodeSection::writeTo(uint8_t *Buf) {
 
 DataSection::DataSection(uint32_t NumDataSegments,
                          std::vector<ObjectFile *> &Objs)
-    : OutputSection(WASM_SEC_DATA), InputObjects(Objs), BodySize(0) {
+    : OutputSection(WASM_SEC_DATA), InputObjects(Objs) {
   raw_string_ostream OS(DataSectionHeader);
   writeUleb128(OS, NumDataSegments, "data segment count");
   OS.flush();
@@ -304,8 +280,8 @@ DataSection::DataSection(uint32_t NumDataSegments,
 }
 
 void DataSection::writeTo(uint8_t *Buf) {
-  log("writing " + toString(this));
-  log(" size=" + Twine(getSize()) + " body=" + Twine(BodySize));
+  log("writing " + toString(this) + " size=" + Twine(getSize()) +
+      " body=" + Twine(BodySize));
   Buf += Offset;
 
   // Write section header
@@ -324,7 +300,7 @@ void DataSection::writeTo(uint8_t *Buf) {
     Buf += Segment.Header.size();
 
     // Data data payload
-    const ArrayRef<uint8_t> &Content(Segment.Segment->Data.Content);
+    ArrayRef<uint8_t> Content(Segment.Segment->Data.Content);
     memcpy(Buf, Content.data(), Content.size());
     Buf += Content.size();
   }

@@ -7,8 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Driver.h"
-
 #include "Config.h"
 #include "Error.h"
 #include "Memory.h"
@@ -18,6 +16,7 @@
 #include "lld/Driver/Driver.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Object/Wasm.h"
+#include "llvm/Option/ArgList.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -29,6 +28,32 @@ using llvm::sys::Process;
 
 namespace lld {
 namespace wasm {
+
+// Parses command line options.
+class WasmOptTable : public llvm::opt::OptTable {
+public:
+  WasmOptTable();
+  llvm::opt::InputArgList parse(ArrayRef<const char *> Argv);
+};
+
+// Create enum with OPT_xxx values for each option in Options.td
+enum {
+  OPT_INVALID = 0,
+#define OPTION(_1, _2, ID, _4, _5, _6, _7, _8, _9, _10, _11, _12) OPT_##ID,
+#include "Options.inc"
+#undef OPTION
+};
+
+class LinkerDriver {
+public:
+  void link(ArrayRef<const char *> ArgsArr);
+
+private:
+  void createFiles(llvm::opt::InputArgList &Args);
+  void addFile(StringRef Path);
+  void addLibrary(StringRef Name);
+  std::vector<InputFile *> Files;
+};
 
 std::vector<SpecificAllocBase *> SpecificAllocBase::Instances;
 Configuration *Config;
@@ -177,7 +202,7 @@ opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
   opt::InputArgList Args = this->ParseArgs(Vec, MissingIndex, MissingCount);
 
   for (auto *Arg : Args.filtered(OPT_UNKNOWN))
-    fatal(Twine("unknown argument: ") + Arg->getSpelling());
+    error("unknown argument: " + Arg->getSpelling());
   return Args;
 }
 
@@ -225,7 +250,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   WasmOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
 
-  // Handle /help
+  // Handle --help
   if (Args.hasArg(OPT_help)) {
     printHelp(ArgsArr[0]);
     return;
@@ -264,18 +289,16 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->MaxMemory = getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize = getZOptionValue(Args, "stack-size", WasmPageSize);
 
-  StringRef AllowUndefinedFilename =
-      Args.getLastArgValue(OPT_allow_undefined_file);
-  if (!AllowUndefinedFilename.empty())
-    if (Optional<MemoryBufferRef> Buf = readFile(AllowUndefinedFilename))
+  if (auto *Arg = Args.getLastArg(OPT_allow_undefined_file))
+    if (Optional<MemoryBufferRef> Buf = readFile(Arg->getValue()))
       for (StringRef Sym : getLines(*Buf))
         Config->AllowUndefinedSymbols.insert(Sym);
 
   if (Config->OutputFile.empty())
-    fatal("no output file specified");
+    error("no output file specified");
 
-  if (!Args.hasArgNoClaim(OPT_INPUT))
-    fatal("no input files");
+  if (!Args.hasArg(OPT_INPUT))
+    error("no input files");
 
   if (Config->Relocatable && !Config->Entry.empty())
     error("entry point specified for relocatable output file");

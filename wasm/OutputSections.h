@@ -14,11 +14,13 @@
 #include "Error.h"
 
 namespace lld {
+
+namespace wasm { class OutputSection; }
+std::string toString(wasm::OutputSection *Section);
+
 namespace wasm {
 
-class OutputSection;
 class ObjectFile;
-std::string toString(OutputSection *Section);
 
 struct OutputDataSegment {
   OutputDataSegment(std::string H, const object::WasmSegment *S)
@@ -30,7 +32,7 @@ struct OutputDataSegment {
 class OutputSection {
 public:
   OutputSection(uint32_t Type, std::string Name = "")
-      : Type(Type), Name(Name), Offset(0) {}
+      : Type(Type), Name(Name) {}
 
   virtual ~OutputSection() = default;
 
@@ -50,7 +52,7 @@ public:
   std::vector<OutputRelocation> Relocations;
 
 protected:
-  size_t Offset;
+  size_t Offset = 0;
 };
 
 class SyntheticSection : public OutputSection {
@@ -64,10 +66,8 @@ public:
   void writeTo(uint8_t *Buf) override {
     assert(Offset);
     log("writing " + toString(this));
-    Buf += Offset;
-    memcpy(Buf, Header.data(), Header.size());
-    Buf += Header.size();
-    memcpy(Buf, Body.data(), Body.size());
+    memcpy(Buf + Offset, Header.data(), Header.size());
+    memcpy(Buf + Offset + Header.size(), Body.data(), Body.size());
   }
 
   size_t getSize() const override { return Header.size() + Body.size(); }
@@ -95,8 +95,8 @@ public:
   explicit SubSection(uint32_t Type) : SyntheticSection(Type) {}
 
   void writeToStream(raw_ostream &OS) {
-    writeData(OS, Header);
-    writeData(OS, Body);
+    writeBytes(OS, Header.data(), Header.size());
+    writeBytes(OS, Body.data(), Body.size());
   }
 };
 
@@ -109,7 +109,7 @@ public:
 protected:
   std::vector<ObjectFile *> &InputObjects;
   std::string CodeSectionHeader;
-  size_t BodySize;
+  size_t BodySize = 0;
 };
 
 class DataSection : public OutputSection {
@@ -123,7 +123,7 @@ protected:
   std::vector<ObjectFile *> &InputObjects;
   std::vector<OutputDataSegment> OutputSegments;
   std::string DataSectionHeader;
-  size_t BodySize;
+  size_t BodySize = 0;
 };
 
 } // namespace wasm
