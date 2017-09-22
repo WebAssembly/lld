@@ -52,7 +52,7 @@ tool_dirs = [config.lld_tools_dir, config.llvm_tools_dir]
 config.substitutions.append( (r"\bld.lld\b", 'ld.lld --full-shutdown') )
 
 tool_patterns = [
-    'FileCheck', 'not', 'ld.lld', 'lld-link', 'llvm-as', 'llvm-mc', 'llvm-nm',
+    'FileCheck', 'not', 'ld.lld', 'llc', 'lld-link', 'llvm-as', 'llvm-mc', 'llvm-nm',
     'llvm-objdump', 'llvm-pdbutil', 'llvm-readobj', 'obj2yaml', 'yaml2obj',
     ToolFilter('lld', pre='-./', post='-.')]
 
@@ -84,6 +84,7 @@ llvm_config.feature_config(
                           'Mips' : 'mips',
                           'PowerPC' : 'ppc',
                           'Sparc' : 'sparc',
+                          'WebAssembly' : 'wasm',
                           'X86' : 'x86'})
     ])
 
