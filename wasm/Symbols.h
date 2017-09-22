@@ -66,14 +66,14 @@ public:
   uint32_t getFunctionIndex() const;
   uint32_t getFunctionTypeIndex() const;
   uint32_t getOutputIndex() const;
+
+  // Returns the virtual address of a defined global.
+  // Only works for globals, not functions.
   uint32_t getMemoryAddress() const;
 
   bool hasOutputIndex() { return OutputIndex.hasValue(); }
 
-  void setOutputIndex(uint32_t Index) {
-    assert(!hasOutputIndex());
-    OutputIndex = Index;
-  }
+  void setOutputIndex(uint32_t Index);
 
   void update(Kind K, InputFile *F = nullptr, const WasmSymbol *Sym = nullptr);
 

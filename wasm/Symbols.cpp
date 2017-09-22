@@ -46,16 +46,23 @@ uint32_t Symbol::getFunctionTypeIndex() const {
 }
 
 uint32_t Symbol::getMemoryAddress() const {
+  assert(isGlobal());
   if (isUndefined())
     return 0;
   ObjectFile *Obj = cast<ObjectFile>(File);
-  return Obj->getGlobalAddress(getGlobalIndex());
+  return Obj->getRelocatedAddress(getGlobalIndex());
 }
 
 uint32_t Symbol::getOutputIndex() const {
   if (isUndefined() && isWeak())
     return 0;
   return OutputIndex.getValue();
+}
+
+void Symbol::setOutputIndex(uint32_t Index) {
+  DEBUG(dbgs() << "setOutputIndex " << Name << " -> " << Index << "\n");
+  assert(!hasOutputIndex());
+  OutputIndex = Index;
 }
 
 void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym) {

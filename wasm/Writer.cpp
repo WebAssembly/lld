@@ -243,7 +243,7 @@ void Writer::createGlobalSection() {
           fatal("unsupported global init opcode: " +
                 Twine(Global.InitExpr.Opcode));
         RelocatedGlobal.InitExpr.Value.Int32 =
-            File->getGlobalAddress(GlobalIndex);
+            File->getRelocatedAddress(GlobalIndex);
         writeGlobal(OS, RelocatedGlobal);
         GlobalIndex++;
       }
@@ -441,12 +441,11 @@ void Writer::createNameSection() {
       if (File->isResolvedFunctionImport(Sym.getValue()))
         continue;
       Symbol *S = Symtab->find(WasmSym.Name);
-      if (S) {
-        assert(S);
-        if (S->WrittenToNameSec)
-          continue;
-        S->WrittenToNameSec = true;
-      }
+      if (!S)
+        continue;
+      if (S->WrittenToNameSec)
+        continue;
+      S->WrittenToNameSec = true;
       FunctionNameCount++;
     }
   }
@@ -470,17 +469,13 @@ void Writer::createNameSection() {
         if (File->isResolvedFunctionImport(Sym.getValue()))
           continue;
         Symbol *S = Symtab->find(WasmSym.Name);
-        if (S) {
-          if (!S->WrittenToNameSec)
-            continue;
-          S->WrittenToNameSec = false;
-        }
-        Expected<StringRef> NameOrError = Sym.getName();
-        if (!NameOrError)
-          fatal("error getting symbol name");
-        writeUleb128(OS, File->relocateFunctionIndex(Sym.getValue()),
-                     "func index");
-        writeStr(OS, *NameOrError, "symbol name");
+        if (!S)
+          continue;
+        if (!S->WrittenToNameSec)
+          continue;
+        S->WrittenToNameSec = false;
+        writeUleb128(OS, S->getOutputIndex(), "func index");
+        writeStr(OS, S->getName(), "symbol name");
       }
     }
   }
@@ -659,14 +654,14 @@ void Writer::calculateImports() {
 
 void Writer::calculateTypes() {
   for (ObjectFile *File : Symtab->ObjectFiles) {
-    int Index = 0;
+    File->TypeMap.reserve(File->getWasmObj()->types().size());
     for (const WasmSignature &Sig : File->getWasmObj()->types()) {
       auto Pair = TypeIndices.insert(std::make_pair(Sig, Types.size()));
       if (Pair.second)
         Types.push_back(&Sig);
 
       // Now we map the input files index to the index in the linked output
-      File->TypeMap[Index++] = Pair.first->second;
+      File->TypeMap.push_back(Pair.first->second);
     }
   }
 }
@@ -679,12 +674,11 @@ void Writer::assignSymbolIndexes() {
         continue;
 
       if (Sym->getFile() && isa<ObjectFile>(Sym->getFile())) {
-        ObjectFile *Obj = dyn_cast<ObjectFile>(Sym->getFile());
+        ObjectFile *Obj = cast<ObjectFile>(Sym->getFile());
         if (Sym->isFunction())
-          Sym->setOutputIndex(
-              Obj->relocateFunctionIndex(Sym->getFunctionIndex()));
+          Sym->setOutputIndex(Obj->FunctionIndexOffset + Sym->getFunctionIndex());
         else
-          Sym->setOutputIndex(Obj->relocateGlobalIndex(Sym->getGlobalIndex()));
+          Sym->setOutputIndex(Obj->GlobalIndexOffset + Sym->getGlobalIndex());
       }
     }
   }

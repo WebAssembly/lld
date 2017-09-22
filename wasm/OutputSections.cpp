@@ -114,7 +114,7 @@ static void calcRelocations(ObjectFile &File, ArrayRef<WasmRelocation> Relocs,
     case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
     case R_WEBASSEMBLY_MEMORY_ADDR_I32:
     case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
-      NewReloc.Value = File.getGlobalAddress(Reloc.Index) + Reloc.Addend;
+      NewReloc.Value = File.getRelocatedAddress(Reloc.Index) + Reloc.Addend;
       break;
     default:
       NewReloc.Value = NewIndex;
