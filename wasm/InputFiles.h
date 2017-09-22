@@ -99,7 +99,7 @@ public:
   uint32_t relocateTableIndex(uint32_t Original) const;
   uint32_t relocateDataLocation(uint32_t Original) const;
 
-  int32_t getGlobalAddress(uint32_t Index);
+  uint32_t getGlobalAddress(uint32_t Index);
 
   // Returns true if the given function index is an imported function,
   // as opposed to the locally defined function.

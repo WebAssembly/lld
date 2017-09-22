@@ -95,7 +95,7 @@ bool ObjectFile::isResolvedGlobalImport(uint32_t Index) {
   return getGlobalSymbol(Index)->isDefined();
 }
 
-int32_t ObjectFile::getGlobalAddress(uint32_t Index) {
+uint32_t ObjectFile::getGlobalAddress(uint32_t Index) {
   if (isImportedGlobal(Index))
     return getGlobalSymbol(Index)->getMemoryAddress();
 

@@ -86,9 +86,6 @@ public:
   unsigned WrittenToNameSec : 1;
 
 protected:
-  const WasmImport &getImport() const;
-  const WasmExport &getExport() const;
-
   StringRef Name;
   Archive::Symbol ArchiveSymbol = {nullptr, 0, 0};
   Kind SymbolKind = InvalidKind;

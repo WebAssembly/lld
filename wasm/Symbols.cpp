@@ -22,45 +22,32 @@ namespace lld {
 namespace wasm {
 
 uint32_t Symbol::getGlobalIndex() const {
-  const WasmExport &Export = getExport();
-  assert(Export.Kind == llvm::wasm::WASM_EXTERNAL_GLOBAL);
-  return Export.Index;
+  assert(!Sym->isFunction());
+  return Sym->ElementIndex;
 }
 
 uint32_t Symbol::getFunctionIndex() const {
-  const WasmExport &Export = getExport();
-  assert(Export.Kind == llvm::wasm::WASM_EXTERNAL_FUNCTION);
-  return Export.Index;
+  assert(Sym->isFunction());
+  return Sym->ElementIndex;
 }
 
 uint32_t Symbol::getFunctionTypeIndex() const {
-  const WasmImport &Import = getImport();
-  assert(Import.Kind == llvm::wasm::WASM_EXTERNAL_FUNCTION);
-  return Import.SigIndex;
-}
-
-const WasmImport &Symbol::getImport() const {
-  assert(isUndefined());
-  assert(Sym != nullptr);
+  assert(Sym->isFunction());
   ObjectFile *Obj = cast<ObjectFile>(File);
-  assert(Sym->ElementIndex < Obj->getWasmObj()->imports().size());
-  return Obj->getWasmObj()->imports()[Sym->ElementIndex];
-}
-
-const WasmExport &Symbol::getExport() const {
-  DEBUG(dbgs() << "getExport: " << getName()
-               << " ElementIndex: " << Sym->ElementIndex << "\n");
-  assert(isDefined());
-  assert(Sym != nullptr);
-  ObjectFile *Obj = cast<ObjectFile>(File);
-  assert(Sym->ElementIndex < Obj->getWasmObj()->exports().size());
-  return Obj->getWasmObj()->exports()[Sym->ElementIndex];
+  if (Obj->isImportedFunction(Sym->ElementIndex)) {
+    const WasmImport &Import = Obj->getWasmObj()->imports()[Sym->ImportIndex];
+    DEBUG(dbgs() << "getFunctionTypeIndex: import: " << Sym->ImportIndex
+                 << " -> " << Import.SigIndex << "\n");
+    return Import.SigIndex;
+  }
+  DEBUG(dbgs() << "getFunctionTypeIndex: non import: " << Sym->ElementIndex << "\n");
+  uint32_t FuntionIndex = Sym->ElementIndex - Obj->NumFunctionImports();
+  return Obj->getWasmObj()->functionTypes()[FuntionIndex];
 }
 
 uint32_t Symbol::getMemoryAddress() const {
   if (isUndefined())
     return 0;
-  assert(Sym != nullptr);
   ObjectFile *Obj = cast<ObjectFile>(File);
   return Obj->getGlobalAddress(getGlobalIndex());
 }
