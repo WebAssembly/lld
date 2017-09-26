@@ -133,7 +133,19 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        16
-; CHECK-NEXT:     DataAlignment:   4
+; CHECK-NEXT:     SegmentInfo:     
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         Name:            .rodata.hello_str
+; CHECK-NEXT:         Alignment:       1
+; CHECK-NEXT:         Flags:           0
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         Name:            .data.func_addr1
+; CHECK-NEXT:         Alignment:       4
+; CHECK-NEXT:         Flags:           0
+; CHECK-NEXT:       - Index:           2
+; CHECK-NEXT:         Name:            .data.func_addr2
+; CHECK-NEXT:         Alignment:       4
+; CHECK-NEXT:         Flags:           0
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   

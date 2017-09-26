@@ -74,4 +74,3 @@ target triple = "wasm32-unknown-unknown-wasm"
 ; CHECK:       - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        35
-; CHECK-NEXT:     DataAlignment:   0

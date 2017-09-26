@@ -159,6 +159,9 @@ void ObjectFile::parse() {
       DataSection = &Section;
   }
 
+  for (const WasmSegment &Segment : WasmObj->dataSegments())
+    DataAlignment = std::max(DataAlignment, Segment.Data.Alignment);
+
   initializeSymbols();
 }
 

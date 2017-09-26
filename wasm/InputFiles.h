@@ -120,6 +120,7 @@ public:
   int32_t GlobalIndexOffset = 0;
   int32_t TableIndexOffset = 0;
   uint32_t DataOffset = 0;
+  uint32_t DataAlignment = 0;
   const WasmSection *CodeSection = nullptr;
   const WasmSection *DataSection = nullptr;
 

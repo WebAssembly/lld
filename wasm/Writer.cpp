@@ -105,7 +105,6 @@ private:
 
   uint64_t FileSize = 0;
   uint32_t DataSize = 0;
-  uint32_t DataAlignment = 1;
   uint32_t NumFunctions = 0;
   uint32_t NumGlobals = 0;
   uint32_t NumMemoryPages = 0;
@@ -419,11 +418,18 @@ void Writer::createLinkingSection() {
   DataSizeSubSection.finalizeContents();
   DataSizeSubSection.writeToStream(OS);
 
-  if (Config->Relocatable) {
-    SubSection DataAlignSubSection(WASM_DATA_ALIGNMENT);
-    writeUleb128(DataAlignSubSection.getStream(), DataAlignment, "data align");
-    DataAlignSubSection.finalizeContents();
-    DataAlignSubSection.writeToStream(OS);
+  if (NumDataSegments && Config->Relocatable) {
+    SubSection SubSection(WASM_SEGMENT_INFO);
+    writeUleb128(SubSection.getStream(), NumDataSegments, "num data segments");
+    for (ObjectFile *File : Symtab->ObjectFiles) {
+      for (const object::WasmSegment &S: File->getWasmObj()->dataSegments()) {
+        writeStr(SubSection.getStream(), S.Data.Name, "segment name");
+        writeUleb128(SubSection.getStream(), S.Data.Alignment, "alignment");
+        writeUleb128(SubSection.getStream(), S.Data.Flags, "flags");
+      }
+    }
+    SubSection.finalizeContents();
+    SubSection.writeToStream(OS);
   }
 }
 
@@ -492,12 +498,11 @@ void Writer::layoutMemory() {
   }
 
   // Static data from input object files comes first
-  MemoryPtr = alignTo(MemoryPtr, DataAlignment);
   for (ObjectFile *File : Symtab->ObjectFiles) {
     const WasmObjectFile *WasmFile = File->getWasmObj();
     uint32_t Size = WasmFile->linkingData().DataSize;
     if (Size) {
-      MemoryPtr = alignTo(MemoryPtr, WasmFile->linkingData().DataAlignment);
+      MemoryPtr = alignTo(MemoryPtr, File->DataAlignment);
       debugPrint("mem: [%s] offset=%#x size=%d\n",
                  File->getName().str().c_str(), File->DataOffset, Size);
       File->DataOffset = MemoryPtr;
@@ -571,9 +576,6 @@ void Writer::calculateOffsets() {
 
   for (ObjectFile *File : Symtab->ObjectFiles) {
     const WasmObjectFile *WasmFile = File->getWasmObj();
-
-    DataAlignment =
-        std::max(DataAlignment, WasmFile->linkingData().DataAlignment);
 
     // Function Index
     File->FunctionIndexOffset =
