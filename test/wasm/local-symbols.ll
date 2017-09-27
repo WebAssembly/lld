@@ -84,6 +84,8 @@ entry:
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name
 ; CHECK-NEXT:     FunctionNames:   
+; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         Name:            baz
 ; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         Name:            _start
 ; CHECK-NEXT: ...

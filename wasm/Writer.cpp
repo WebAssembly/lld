@@ -433,15 +433,10 @@ void Writer::createNameSection() {
 
   size_t FunctionNameCount = 0;
   for (ObjectFile *File : Symtab->ObjectFiles) {
-    const WasmObjectFile *WasmFile = File->getWasmObj();
-    for (object::SymbolRef Sym : WasmFile->symbols()) {
-      const WasmSymbol &WasmSym = WasmFile->getWasmSymbol(Sym);
-      if (WasmSym.Type != WasmSymbol::SymbolType::DEBUG_FUNCTION_NAME)
+    for (Symbol *S : File->getSymbols()) {
+      if (!S->isFunction() || S->isWeak())
         continue;
-      if (File->isResolvedFunctionImport(Sym.getValue()))
-        continue;
-      Symbol *S = Symtab->find(WasmSym.Name);
-      if (!S)
+      if (File->isResolvedFunctionImport(S->getFunctionIndex()))
         continue;
       if (S->WrittenToNameSec)
         continue;
@@ -458,18 +453,12 @@ void Writer::createNameSection() {
   // appear first before any of the local function names.
   for (bool ImportedNames : {true, false}) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
-      const WasmObjectFile *WasmFile = File->getWasmObj();
-      for (object::SymbolRef Sym : WasmFile->symbols()) {
-        if (File->isImportedFunction(Sym.getValue()) != ImportedNames)
+      for (Symbol *S : File->getSymbols()) {
+        if (!S->isFunction() || S->isWeak())
           continue;
-
-        const WasmSymbol &WasmSym = WasmFile->getWasmSymbol(Sym);
-        if (WasmSym.Type != WasmSymbol::SymbolType::DEBUG_FUNCTION_NAME)
+        if (File->isImportedFunction(S->getFunctionIndex()) != ImportedNames)
           continue;
-        if (File->isResolvedFunctionImport(Sym.getValue()))
-          continue;
-        Symbol *S = Symtab->find(WasmSym.Name);
-        if (!S)
+        if (File->isResolvedFunctionImport(S->getFunctionIndex()))
           continue;
         if (!S->WrittenToNameSec)
           continue;
