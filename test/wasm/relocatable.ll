@@ -7,16 +7,18 @@ target datalayout = "e-m:e-p:32:32-i64:64-n32:64-S128"
 target triple = "wasm32-unknown-unknown-wasm"
 
 ; Function Attrs: nounwind
-define hidden i32 @my_func() local_unnamed_addr #0 {
+define hidden i32 @my_func() local_unnamed_addr {
 entry:
-  %call = tail call i32 @foo_import() #2
+  %call = tail call i32 @foo_import()
   ret i32 1
 }
 
-declare i32 @foo_import() local_unnamed_addr #1
+declare i32 @foo_import() local_unnamed_addr
+@data_import = external global i64
 
 @func_addr1 = hidden global i32()* @my_func, align 4
 @func_addr2 = hidden global i32()* @foo_import, align 4
+@data_addr1 = hidden global i64* @data_import, align 8
 
 ; CHECK:      --- !WASM
 ; CHECK-NEXT: FileHeader:      
@@ -44,6 +46,11 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         Field:           foo_import
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         SigIndex:        2
+; CHECK-NEXT:       - Module:          env
+; CHECK-NEXT:         Field:           data_import
+; CHECK-NEXT:         Kind:            GLOBAL
+; CHECK-NEXT:         GlobalType:      I32
+; CHECK-NEXT:         GlobalMutable:   false
 ; CHECK-NEXT:   - Type:            FUNCTION
 ; CHECK-NEXT:     FunctionTypes:   [ 0, 2 ]
 ; CHECK-NEXT:   - Type:            TABLE
@@ -73,6 +80,11 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:         InitExpr:        
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           12
+; CHECK-NEXT:       - Type:            I32
+; CHECK-NEXT:         Mutable:         false
+; CHECK-NEXT:         InitExpr:        
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           16
 ; CHECK-NEXT:   - Type:            EXPORT
 ; CHECK-NEXT:     Exports:         
 ; CHECK-NEXT:       - Name:            hello
@@ -90,7 +102,7 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Relocations:     
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_MEMORY_ADDR_SLEB
-; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:         Offset:          0x00000004
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_FUNCTION_INDEX_LEB
 ; CHECK-NEXT:         Index:           0
@@ -111,6 +123,9 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_TABLE_INDEX_I32
 ; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:         Offset:          0x0000001B
+; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_MEMORY_ADDR_I32
+; CHECK-NEXT:         Index:           0
+; CHECK-NEXT:         Offset:          0x00000024
 ; CHECK-NEXT:     Segments:        
 ; CHECK-NEXT:       - SectionOffset:   6
 ; CHECK-NEXT:         MemoryIndex:     0
@@ -130,9 +145,15 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:           Opcode:          I32_CONST
 ; CHECK-NEXT:           Value:           12
 ; CHECK-NEXT:         Content:         '01000000'
+; CHECK-NEXT:       - SectionOffset:   36
+; CHECK-NEXT:         MemoryIndex:     0
+; CHECK-NEXT:         Offset:          
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           16
+; CHECK-NEXT:         Content:         FFFFFFFF
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
-; CHECK-NEXT:     DataSize:        16
+; CHECK-NEXT:     DataSize:        20
 ; CHECK-NEXT:     SegmentInfo:     
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Name:            .rodata.hello_str
@@ -145,6 +166,10 @@ declare i32 @foo_import() local_unnamed_addr #1
 ; CHECK-NEXT:       - Index:           2
 ; CHECK-NEXT:         Name:            .data.func_addr2
 ; CHECK-NEXT:         Alignment:       4
+; CHECK-NEXT:         Flags:           0
+; CHECK-NEXT:       - Index:           3
+; CHECK-NEXT:         Name:            .data.data_addr1
+; CHECK-NEXT:         Alignment:       8
 ; CHECK-NEXT:         Flags:           0
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            name

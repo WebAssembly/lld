@@ -48,7 +48,7 @@ uint32_t Symbol::getFunctionTypeIndex() const {
 uint32_t Symbol::getMemoryAddress() const {
   assert(isGlobal());
   if (isUndefined())
-    return 0;
+    return UINT32_MAX;
   ObjectFile *Obj = cast<ObjectFile>(File);
   return Obj->getRelocatedAddress(getGlobalIndex());
 }

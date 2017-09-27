@@ -70,7 +70,7 @@ entry:
 ; CHECK-NEXT:       - Locals:
 ; CHECK-NEXT:         Body:            4181808080000B
 ; CHECK-NEXT:       - Locals:
-; CHECK-NEXT:         Body:            4100280280808080000B
+; CHECK-NEXT:         Body:            41002802FFFFFFFF0F0B
 ; CHECK-NEXT:   - Type:            CUSTOM
 ; CHECK-NEXT:     Name:            linking
 ; CHECK-NEXT:     DataSize:        0

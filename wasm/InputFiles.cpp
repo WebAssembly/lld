@@ -94,7 +94,7 @@ uint32_t ObjectFile::getRelocatedAddress(uint32_t Index) const {
     return Sym->getMemoryAddress();
 
   if (isImportedGlobal(Index))
-    return 0;
+    return UINT32_MAX;
 
   const WasmGlobal &Global = WasmObj->globals()[Index - NumGlobalImports()];
   assert(Global.Type == WASM_TYPE_I32);
