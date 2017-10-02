@@ -290,9 +290,6 @@ template <class ELFT> void Writer<ELFT>::createSyntheticSections() {
     Add(InX::BuildId);
   }
 
-  for (InputSection *S : createCommonSections())
-    Add(S);
-
   InX::Bss = make<BssSection>(".bss");
   Add(InX::Bss);
   InX::BssRelRo = make<BssSection>(".bss.rel.ro");
@@ -333,8 +330,8 @@ template <class ELFT> void Writer<ELFT>::createSyntheticSections() {
     }
 
     if (Config->SysvHash) {
-      In<ELFT>::HashTab = make<HashTableSection<ELFT>>();
-      Add(In<ELFT>::HashTab);
+      InX::HashTab = make<HashTableSection>();
+      Add(InX::HashTab);
     }
 
     Add(InX::Dynamic);
@@ -441,11 +438,7 @@ static bool includeInSymtab(const SymbolBody &B) {
     if (auto *S = dyn_cast<MergeInputSection>(Sec))
       if (!S->getSectionPiece(D->Value)->Live)
         return false;
-    return true;
   }
-
-  if (auto *Sym = dyn_cast<DefinedCommon>(&B))
-    return Sym->Live;
   return true;
 }
 
@@ -1187,8 +1180,6 @@ static void removeUnusedSyntheticSections() {
     OutputSection *OS = SS->getParent();
     if (!SS->empty() || !OS)
       continue;
-    if ((SS == InX::Got || SS == InX::MipsGot) && ElfSym::GlobalOffsetTable)
-      continue;
 
     std::vector<BaseCommand *>::iterator Empty = OS->Commands.end();
     for (auto I = OS->Commands.begin(), E = OS->Commands.end(); I != E; ++I) {
@@ -1355,7 +1346,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
   // symbol table section (DynSymTab) must be the first one.
   applySynthetic({InX::DynSymTab,    InX::Bss,
                   InX::BssRelRo,     InX::GnuHashTab,
-                  In<ELFT>::HashTab, InX::SymTab,
+                  InX::HashTab,      InX::SymTab,
                   InX::ShStrTab,     InX::StrTab,
                   In<ELFT>::VerDef,  InX::DynStrTab,
                   InX::Got,          InX::MipsGot,
@@ -1919,14 +1910,16 @@ template <class ELFT> void Writer<ELFT>::writeSections() {
   // In -r or -emit-relocs mode, write the relocation sections first as in
   // ELf_Rel targets we might find out that we need to modify the relocated
   // section while doing it.
-  for (OutputSection *Sec : OutputSections)
+  parallelForEach(OutputSections, [&](OutputSection *Sec) {
     if (Sec->Type == SHT_REL || Sec->Type == SHT_RELA)
       Sec->writeTo<ELFT>(Buf + Sec->Offset);
+  });
 
-  for (OutputSection *Sec : OutputSections)
+  parallelForEach(OutputSections, [&](OutputSection *Sec) {
     if (Sec != Out::Opd && Sec != EhFrameHdr && Sec->Type != SHT_REL &&
         Sec->Type != SHT_RELA)
       Sec->writeTo<ELFT>(Buf + Sec->Offset);
+  });
 
   // The .eh_frame_hdr depends on .eh_frame section contents, therefore
   // it should be written after .eh_frame is written.
