@@ -10,7 +10,7 @@
 #ifndef LLD_WASM_INPUT_FILES_H
 #define LLD_WASM_INPUT_FILES_H
 
-#include "lld/Core/LLVM.h"
+#include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Object/Archive.h"
