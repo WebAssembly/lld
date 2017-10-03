@@ -9,7 +9,7 @@
 
 #include "InputSegment.h"
 #include "OutputSegment.h"
-#include "lld/Core/LLVM.h"
+#include "lld/Common/LLVM.h"
 
 #define DEBUG_TYPE "lld"
 

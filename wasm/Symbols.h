@@ -10,7 +10,7 @@
 #ifndef LLD_WASM_SYMBOLS_H
 #define LLD_WASM_SYMBOLS_H
 
-#include "lld/Core/LLVM.h"
+#include "lld/Common/LLVM.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Wasm.h"
 
