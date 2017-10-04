@@ -24,6 +24,5 @@ add_lld_library(lldWasm
   Support
 
   LINK_LIBS
-  lldConfig
   lldCore
   )
