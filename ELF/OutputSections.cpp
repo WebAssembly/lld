@@ -76,12 +76,6 @@ OutputSection::OutputSection(StringRef Name, uint32_t Type, uint64_t Flags)
   Live = false;
 }
 
-static uint64_t updateOffset(uint64_t Off, InputSection *S) {
-  Off = alignTo(Off, S->Alignment);
-  S->OutSecOff = Off;
-  return Off + S->getSize();
-}
-
 void OutputSection::addSection(InputSection *S) {
   assert(S->Live);
   Live = true;
@@ -92,13 +86,14 @@ void OutputSection::addSection(InputSection *S) {
   // crude approximation so that it is at least easy for other code to know the
   // section order. It is also used to calculate the output section size early
   // for compressed debug sections.
-  this->Size = updateOffset(Size, S);
+  S->OutSecOff = alignTo(Size, S->Alignment);
+  this->Size = S->OutSecOff + S->getSize();
 
   // If this section contains a table of fixed-size entries, sh_entsize
   // holds the element size. Consequently, if this contains two or more
   // input sections, all of them must have the same sh_entsize. However,
   // you can put different types of input sections into one output
-  // sectin by using linker scripts. I don't know what to do here.
+  // section by using linker scripts. I don't know what to do here.
   // Probably we sholuld handle that as an error. But for now we just
   // pick the largest sh_entsize.
   this->Entsize = std::max(this->Entsize, S->Entsize);
@@ -205,14 +200,25 @@ void elf::reportDiscarded(InputSectionBase *IS) {
           IS->File->getName() + "'");
 }
 
-static OutputSection *addSection(InputSectionBase *IS, StringRef OutsecName,
-                                 OutputSection *Sec) {
-  if (Sec && Sec->Live) {
+static OutputSection *createSection(InputSectionBase *IS, StringRef OutsecName) {
+  OutputSection *Sec = Script->createOutputSection(OutsecName, "<internal>");
+  Sec->Type = IS->Type;
+  Sec->Flags = IS->Flags;
+  Sec->addSection(cast<InputSection>(IS));
+
+  Script->Opt.Commands.push_back(Sec);
+
+  return Sec;
+}
+
+static void addSection(OutputSection *Sec, InputSectionBase *IS, StringRef OutsecName) {
+  if (Sec->Live) {
     if (getIncompatibleFlags(Sec->Flags) != getIncompatibleFlags(IS->Flags))
       error("incompatible section flags for " + Sec->Name + "\n>>> " +
             toString(IS) + ": 0x" + utohexstr(IS->Flags) +
             "\n>>> output section " + Sec->Name + ": 0x" +
             utohexstr(Sec->Flags));
+
     if (Sec->Type != IS->Type) {
       if (canMergeToProgbits(Sec->Type) && canMergeToProgbits(IS->Type))
         Sec->Type = SHT_PROGBITS;
@@ -223,18 +229,12 @@ static OutputSection *addSection(InputSectionBase *IS, StringRef OutsecName,
               "\n>>> output section " + Sec->Name + ": " +
               getELFSectionTypeName(Config->EMachine, Sec->Type));
     }
-    Sec->Flags |= IS->Flags;
   } else {
-    if (!Sec) {
-      Sec = Script->createOutputSection(OutsecName, "<internal>");
-      Script->Opt.Commands.push_back(Sec);
-    }
     Sec->Type = IS->Type;
-    Sec->Flags = IS->Flags;
   }
 
+  Sec->Flags |= IS->Flags;
   Sec->addSection(cast<InputSection>(IS));
-  return Sec;
 }
 
 void OutputSectionFactory::addInputSec(InputSectionBase *IS,
@@ -247,7 +247,7 @@ void OutputSectionFactory::addInputSec(InputSectionBase *IS,
 
   // If we have destination output section - use it directly.
   if (OS) {
-    addSection(IS, OutsecName, OS);
+    addSection(OS, IS, OutsecName);
     return;
   }
 
@@ -259,7 +259,7 @@ void OutputSectionFactory::addInputSec(InputSectionBase *IS,
   // as-is because adding/removing members or merging them with other groups
   // change their semantics.
   if (IS->Type == SHT_GROUP || (IS->Flags & SHF_GROUP)) {
-    addSection(IS, OutsecName, nullptr);
+    createSection(IS, OutsecName);
     return;
   }
 
@@ -273,13 +273,20 @@ void OutputSectionFactory::addInputSec(InputSectionBase *IS,
       (IS->Type == SHT_REL || IS->Type == SHT_RELA)) {
     auto *Sec = cast<InputSection>(IS);
     OutputSection *Out = Sec->getRelocatedSection()->getOutputSection();
-    Out->RelocationSection = addSection(IS, OutsecName, Out->RelocationSection);
+
+    if (Out->RelocationSection)
+      addSection(Out->RelocationSection, IS, OutsecName);
+    else
+      Out->RelocationSection = createSection(IS, OutsecName);
     return;
   }
 
   SectionKey Key = createKey(IS, OutsecName);
   OutputSection *&Sec = Map[Key];
-  Sec = addSection(IS, OutsecName, Sec);
+  if (Sec)
+    addSection(Sec, IS, OutsecName);
+  else
+    Sec = createSection(IS, OutsecName);
 }
 
 OutputSectionFactory::~OutputSectionFactory() {}
