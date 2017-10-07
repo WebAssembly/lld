@@ -52,12 +52,8 @@ llvm_config.use_default_substitutions()
 tool_dirs = [config.lld_tools_dir, config.llvm_tools_dir]
 
 tool_patterns = [
-<<<<<<< HEAD
-    'FileCheck', 'not', 'ld.lld', 'llc', 'lld-link', 'llvm-as', 'llvm-mc', 'llvm-nm',
-=======
     ToolSubst('ld.lld', extra_args=['--full-shutdown']),
-    'lld-link', 'llvm-as', 'llvm-mc', 'llvm-nm',
->>>>>>> master
+    'llc', 'lld-link', 'llvm-as', 'llvm-mc', 'llvm-nm',
     'llvm-objdump', 'llvm-pdbutil', 'llvm-readobj', 'obj2yaml', 'yaml2obj',
     'lld']
 
