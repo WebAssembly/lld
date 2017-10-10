@@ -117,7 +117,7 @@ StringRef elf::getOutputSectionName(StringRef Name) {
 
 static bool needsInterpSection() {
   return !SharedFiles.empty() && !Config->DynamicLinker.empty() &&
-         !Script->ignoreInterpSection();
+         Script->needsInterpSection();
 }
 
 template <class ELFT> void elf::writeResult() { Writer<ELFT>().run(); }
@@ -265,7 +265,7 @@ template <class ELFT> void Writer<ELFT>::createSyntheticSections() {
   Out::ElfHeader = make<OutputSection>("", 0, SHF_ALLOC);
   Out::ElfHeader->Size = sizeof(Elf_Ehdr);
   Out::ProgramHeaders = make<OutputSection>("", 0, SHF_ALLOC);
-  Out::ProgramHeaders->updateAlignment(Config->Wordsize);
+  Out::ProgramHeaders->Alignment = Config->Wordsize;
 
   if (needsInterpSection()) {
     InX::Interp = createInterpSection();
@@ -799,13 +799,6 @@ template <class ELFT> void Writer<ELFT>::addReservedSymbols() {
   ElfSym::GlobalOffsetTable = addOptionalRegular<ELFT>(
       "_GLOBAL_OFFSET_TABLE_", GotSection, Target->GotBaseSymOff);
 
-  // __tls_get_addr is defined by the dynamic linker for dynamic ELFs. For
-  // static linking the linker is required to optimize away any references to
-  // __tls_get_addr, so it's not defined anywhere. Create a hidden definition
-  // to avoid the undefined symbol error.
-  if (!InX::DynSymTab)
-    Symtab->addIgnored<ELFT>("__tls_get_addr");
-
   // __ehdr_start is the location of ELF file headers. Note that we define
   // this symbol unconditionally even when using a linker script, which
   // differs from the behavior implemented by GNU linker which only define
@@ -876,13 +869,15 @@ void Writer<ELFT>::forEachRelSec(std::function<void(InputSectionBase &)> Fn) {
 }
 
 template <class ELFT> void Writer<ELFT>::createSections() {
-  std::vector<BaseCommand *> Old = Script->Opt.Commands;
-  Script->Opt.Commands.clear();
+  std::vector<OutputSection *> Vec;
   for (InputSectionBase *IS : InputSections)
     if (IS)
-      Factory.addInputSec(IS, getOutputSectionName(IS->Name), nullptr);
-  Script->Opt.Commands.insert(Script->Opt.Commands.end(), Old.begin(),
-                              Old.end());
+      if (OutputSection *Sec =
+              Factory.addInputSec(IS, getOutputSectionName(IS->Name)))
+        Vec.push_back(Sec);
+
+  Script->Opt.Commands.insert(Script->Opt.Commands.begin(), Vec.begin(),
+                              Vec.end());
 
   Script->fabricateDefaultCommands();
   sortBySymbolsOrder();
@@ -1027,9 +1022,11 @@ findOrphanPos(std::vector<BaseCommand *>::iterator B,
         Sec->SortRank < CurSec->SortRank)
       break;
   }
-  auto J = std::find_if(
-      llvm::make_reverse_iterator(I), llvm::make_reverse_iterator(B),
-      [](BaseCommand *Cmd) { return isa<OutputSection>(Cmd); });
+  auto J = std::find_if(llvm::make_reverse_iterator(I),
+                        llvm::make_reverse_iterator(B), [](BaseCommand *Cmd) {
+                          auto *OS = dyn_cast<OutputSection>(Cmd);
+                          return OS && OS->Live;
+                        });
   I = J.base();
 
   // As a special case, if the orphan section is the last section, put

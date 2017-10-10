@@ -365,7 +365,6 @@ void LinkerScript::processCommands(OutputSectionFactory &Factory) {
   // script parser.
   CurAddressState = State.get();
   CurAddressState->OutSec = Aether;
-  Dot = 0;
 
   for (size_t I = 0; I < Opt.Commands.size(); ++I) {
     // Handle symbol assignments outside of any output section.
@@ -416,7 +415,8 @@ void LinkerScript::processCommands(OutputSectionFactory &Factory) {
 
       // Add input sections to an output section.
       for (InputSectionBase *S : V)
-        Factory.addInputSec(S, Sec->Name, Sec);
+        Sec->addSection(cast<InputSection>(S));
+
       assert(Sec->SectionIndex == INT_MAX);
       Sec->SectionIndex = I;
       if (Sec->Noload)
@@ -437,7 +437,7 @@ void LinkerScript::fabricateDefaultCommands() {
     StartAddr = std::min(StartAddr, KV.second);
 
   auto Expr = [=] {
-    return std::min(StartAddr, Config->ImageBase + elf::getHeaderSize());
+    return std::min(StartAddr, Target->getImageBase() + elf::getHeaderSize());
   };
   Opt.Commands.insert(Opt.Commands.begin(),
                       make<SymbolAssignment>(".", Expr, ""));
@@ -465,11 +465,13 @@ void LinkerScript::addOrphanSections(OutputSectionFactory &Factory) {
 
     if (OutputSection *Sec = findByName(
             makeArrayRef(Opt.Commands).slice(0, End), Name)) {
-      Factory.addInputSec(S, Name, Sec);
-    } else {
-      Factory.addInputSec(S, Name, nullptr);
-      assert(S->getOutputSection()->SectionIndex == INT_MAX);
+      Sec->addSection(cast<InputSection>(S));
+      continue;
     }
+
+    if (OutputSection *OS = Factory.addInputSec(S, Name))
+      Script->Opt.Commands.push_back(OS);
+    assert(S->getOutputSection()->SectionIndex == INT_MAX);
   }
 }
 
@@ -685,7 +687,8 @@ void LinkerScript::adjustSectionsAfterSorting() {
       Sec->MemRegion = findMemoryRegion(Sec);
       // Handle align (e.g. ".foo : ALIGN(16) { ... }").
       if (Sec->AlignExpr)
-        Sec->updateAlignment(Sec->AlignExpr().getValue());
+        Sec->Alignment =
+            std::max<uint32_t>(Sec->Alignment, Sec->AlignExpr().getValue());
     }
   }
 
@@ -776,9 +779,11 @@ LinkerScript::AddressState::AddressState(const ScriptConfiguration &Opt) {
   }
 }
 
+// Assign addresses as instructed by linker script SECTIONS sub-commands.
 void LinkerScript::assignAddresses() {
-  // Assign addresses as instructed by linker script SECTIONS sub-commands.
-  Dot = 0;
+  // By default linker scripts use an initial value of 0 for '.', but prefer
+  // -image-base if set.
+  Dot = Config->ImageBase ? *Config->ImageBase : 0;
   auto State = make_unique<AddressState>(Opt);
   // CurAddressState captures the local AddressState and makes it accessible
   // deliberately. This is needed as there are some cases where we cannot just
@@ -811,8 +816,7 @@ std::vector<PhdrEntry *> LinkerScript::createPhdrs() {
   // Process PHDRS and FILEHDR keywords because they are not
   // real output sections and cannot be added in the following loop.
   for (const PhdrsCommand &Cmd : Opt.PhdrsCommands) {
-    PhdrEntry *Phdr =
-        make<PhdrEntry>(Cmd.Type, Cmd.Flags == UINT_MAX ? PF_R : Cmd.Flags);
+    PhdrEntry *Phdr = make<PhdrEntry>(Cmd.Type, Cmd.Flags ? *Cmd.Flags : PF_R);
 
     if (Cmd.HasFilehdr)
       Phdr->add(Out::ElfHeader);
@@ -831,22 +835,25 @@ std::vector<PhdrEntry *> LinkerScript::createPhdrs() {
     // Assign headers specified by linker script
     for (size_t Id : getPhdrIndices(Sec)) {
       Ret[Id]->add(Sec);
-      if (Opt.PhdrsCommands[Id].Flags == UINT_MAX)
+      if (!Opt.PhdrsCommands[Id].Flags.hasValue())
         Ret[Id]->p_flags |= Sec->getPhdrFlags();
     }
   }
   return Ret;
 }
 
-bool LinkerScript::ignoreInterpSection() {
-  // Ignore .interp section in case we have PHDRS specification
-  // and PT_INTERP isn't listed.
+// Returns true if we should emit an .interp section.
+//
+// We usually do. But if PHDRS commands are given, and
+// no PT_INTERP is there, there's no place to emit an
+// .interp, so we don't do that in that case.
+bool LinkerScript::needsInterpSection() {
   if (Opt.PhdrsCommands.empty())
-    return false;
+    return true;
   for (PhdrsCommand &Cmd : Opt.PhdrsCommands)
     if (Cmd.Type == PT_INTERP)
-      return false;
-  return true;
+      return true;
+  return false;
 }
 
 ExprValue LinkerScript::getSymbolValue(const Twine &Loc, StringRef S) {
@@ -867,34 +874,26 @@ ExprValue LinkerScript::getSymbolValue(const Twine &Loc, StringRef S) {
   return 0;
 }
 
-bool LinkerScript::isDefined(StringRef S) { return Symtab->find(S) != nullptr; }
-
-static const size_t NoPhdr = -1;
+// Returns the index of the segment named Name.
+static Optional<size_t> getPhdrIndex(ArrayRef<PhdrsCommand> Vec,
+                                     StringRef Name) {
+  for (size_t I = 0; I < Vec.size(); ++I)
+    if (Vec[I].Name == Name)
+      return I;
+  return None;
+}
 
 // Returns indices of ELF headers containing specific section. Each index is a
 // zero based number of ELF header listed within PHDRS {} script block.
 std::vector<size_t> LinkerScript::getPhdrIndices(OutputSection *Cmd) {
   std::vector<size_t> Ret;
-  for (StringRef PhdrName : Cmd->Phdrs) {
-    size_t Index = getPhdrIndex(Cmd->Location, PhdrName);
-    if (Index != NoPhdr)
-      Ret.push_back(Index);
+
+  for (StringRef S : Cmd->Phdrs) {
+    if (Optional<size_t> Idx = getPhdrIndex(Opt.PhdrsCommands, S))
+      Ret.push_back(*Idx);
+    else if (S != "NONE")
+      error(Cmd->Location + ": section header '" + S +
+            "' is not listed in PHDRS");
   }
   return Ret;
-}
-
-// Returns the index of the segment named PhdrName if found otherwise
-// NoPhdr. When not found, if PhdrName is not the special case value 'NONE'
-// (which can be used to explicitly specify that a section isn't assigned to a
-// segment) then error.
-size_t LinkerScript::getPhdrIndex(const Twine &Loc, StringRef PhdrName) {
-  size_t I = 0;
-  for (PhdrsCommand &Cmd : Opt.PhdrsCommands) {
-    if (Cmd.Name == PhdrName)
-      return I;
-    ++I;
-  }
-  if (PhdrName != "NONE")
-    error(Loc + ": section header '" + PhdrName + "' is not listed in PHDRS");
-  return NoPhdr;
 }

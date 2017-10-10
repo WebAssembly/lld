@@ -363,7 +363,7 @@ void BuildIdSection::computeHash(
 BssSection::BssSection(StringRef Name, uint64_t Size, uint32_t Alignment)
     : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_NOBITS, Alignment, Name) {
   if (OutputSection *Sec = getParent())
-    Sec->updateAlignment(Alignment);
+    Sec->Alignment = std::max(Sec->Alignment, Alignment);
   this->Size = Size;
 }
 
@@ -494,8 +494,10 @@ template <class ELFT>
 void EhFrameSection<ELFT>::addSection(InputSectionBase *C) {
   auto *Sec = cast<EhInputSection>(C);
   Sec->Parent = this;
-  updateAlignment(Sec->Alignment);
+
+  Alignment = std::max(Alignment, Sec->Alignment);
   Sections.push_back(Sec);
+
   for (auto *DS : Sec->DependentSections)
     DependentSections.push_back(DS);
 
@@ -587,6 +589,8 @@ uint64_t EhFrameSection<ELFT>::getFdePc(uint8_t *Buf, size_t FdeOff,
 
 template <class ELFT> void EhFrameSection<ELFT>::writeTo(uint8_t *Buf) {
   const endianness E = ELFT::TargetEndianness;
+
+  // Write CIE and FDE records.
   for (CieRecord *Rec : CieRecords) {
     size_t CieOffset = Rec->Cie->OutputOff;
     writeCieFde<ELFT>(Buf + CieOffset, Rec->Cie->data());
@@ -601,6 +605,9 @@ template <class ELFT> void EhFrameSection<ELFT>::writeTo(uint8_t *Buf) {
     }
   }
 
+  // Apply relocations. .eh_frame section contents are not contiguous
+  // in the output buffer, but relocateAlloc() still works because
+  // getOffset() takes care of discontiguous section pieces.
   for (EhInputSection *S : Sections)
     S->relocateAlloc(Buf, nullptr);
 
@@ -1159,7 +1166,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   if (Config->EMachine == EM_MIPS) {
     add({DT_MIPS_RLD_VERSION, 1});
     add({DT_MIPS_FLAGS, RHF_NOTPOT});
-    add({DT_MIPS_BASE_ADDRESS, Config->ImageBase});
+    add({DT_MIPS_BASE_ADDRESS, Target->getImageBase()});
     add({DT_MIPS_SYMTABNO, InX::DynSymTab->getNumSymbols()});
     add({DT_MIPS_LOCAL_GOTNO, InX::MipsGot->getLocalEntriesNum()});
     if (const SymbolBody *B = InX::MipsGot->getFirstGlobalEntry())
