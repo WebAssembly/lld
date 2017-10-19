@@ -125,7 +125,7 @@ private:
 
   std::unique_ptr<FileOutputBuffer> Buffer;
 
-  std::vector<OutputSegment  *> Segments;
+  std::vector<OutputSegment *> Segments;
   llvm::SmallDenseMap<StringRef, OutputSegment *> SegmentMap;
 };
 
@@ -281,7 +281,8 @@ void Writer::createExportSection() {
   if (ExportOther) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
-        if (!Sym->isFunction() || Sym->isUndefined() || Sym->WrittenToSymtab)
+        if (!Sym->isFunction() || Sym->isLocal() || Sym->isUndefined() ||
+            Sym->WrittenToSymtab)
           continue;
         Sym->WrittenToSymtab = true;
         NumExports++;
@@ -324,7 +325,8 @@ void Writer::createExportSection() {
   if (ExportOther) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
-        if (!Sym->isFunction() || Sym->isUndefined() || !Sym->WrittenToSymtab)
+        if (!Sym->isFunction() || Sym->isLocal() | Sym->isUndefined() ||
+            !Sym->WrittenToSymtab)
           continue;
         Sym->WrittenToSymtab = false;
         log("Export: " + Sym->getName());
@@ -436,40 +438,34 @@ void Writer::createLinkingSection() {
 
 // Create the custom "name" section containing debug symbol names.
 void Writer::createNameSection() {
-  SyntheticSection *Section = createSyntheticSection(WASM_SEC_CUSTOM, "name");
+  // Create an array of all function sorted by function index space
+  std::vector<const Symbol *> Names;
 
-  size_t FunctionNameCount = 0;
   for (ObjectFile *File : Symtab->ObjectFiles) {
+    Names.reserve(Names.size() + File->getSymbols().size());
     for (Symbol *S : File->getSymbols()) {
-      if (!S->isFunction() || S->isWeak())
-        continue;
-      if (S->WrittenToNameSec)
+      if (!S->isFunction() || S->isWeak() || S->WrittenToNameSec)
         continue;
       S->WrittenToNameSec = true;
-      FunctionNameCount++;
+      Names.emplace_back(S);
     }
   }
 
+  SyntheticSection *Section = createSyntheticSection(WASM_SEC_CUSTOM, "name");
+
+  std::sort(Names.begin(), Names.end(), [](const Symbol *A, const Symbol *B) {
+    return A->getOutputIndex() < B->getOutputIndex();
+  });
+
   SubSection FunctionSubsection(WASM_NAMES_FUNCTION);
   raw_ostream &OS = FunctionSubsection.getStream();
-  writeUleb128(OS, FunctionNameCount, "name count");
+  writeUleb128(OS, Names.size(), "name count");
 
   // We have to iterate through the inputs twice so that all the imports
   // appear first before any of the local function names.
-  for (bool ImportedNames : {true, false}) {
-    for (ObjectFile *File : Symtab->ObjectFiles) {
-      for (Symbol *S : File->getSymbols()) {
-        if (!S->isFunction() || S->isWeak())
-          continue;
-        if (File->isImportedFunction(S->getFunctionIndex()) != ImportedNames)
-          continue;
-        if (!S->WrittenToNameSec)
-          continue;
-        S->WrittenToNameSec = false;
-        writeUleb128(OS, S->getOutputIndex(), "func index");
-        writeStr(OS, S->getName(), "symbol name");
-      }
-    }
+  for (const Symbol *S : Names) {
+    writeUleb128(OS, S->getOutputIndex(), "func index");
+    writeStr(OS, S->getName(), "symbol name");
   }
 
   FunctionSubsection.finalizeContents();

@@ -39,8 +39,8 @@ public:
     InvalidKind,
   };
 
-  Symbol(StringRef Name)
-      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name) {}
+  Symbol(StringRef Name, bool IsLocal)
+      : WrittenToSymtab(0), WrittenToNameSec(0), Name(Name), IsLocal(IsLocal) {}
 
   Kind getKind() const { return SymbolKind; }
 
@@ -55,6 +55,7 @@ public:
            SymbolKind == UndefinedFunctionKind;
   }
   bool isGlobal() const { return !isFunction(); }
+  bool isLocal() const { return IsLocal; }
   bool isWeak() const;
 
   // Returns the symbol name.
@@ -89,6 +90,7 @@ public:
 
 protected:
   StringRef Name;
+  bool IsLocal;
   Archive::Symbol ArchiveSymbol = {nullptr, 0, 0};
   Kind SymbolKind = InvalidKind;
   InputFile *File = nullptr;

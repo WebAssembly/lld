@@ -135,10 +135,15 @@ void ObjectFile::parse() {
 InputSegment* ObjectFile::getSegment(const WasmSymbol &WasmSym) {
   uint32_t Address = WasmObj->getWasmSymbolValue(WasmSym);
   for (InputSegment* Segment : Segments) {
-    if (Address >= Segment->startVA() && Address < Segment->endVA())
+    if (Address >= Segment->startVA() && Address < Segment->endVA()) {
+      DEBUG(dbgs() << "Found symbol in segmnet: " << WasmSym.Name << " -> "
+                   << Segment->getName() << "\n");
+
       return Segment;
+    }
   }
-  assert(false && "Symbol not found in any segment");
+  error("Symbol not found in any segment: " + WasmSym.Name);
+  return nullptr;
 }
 
 void ObjectFile::initializeSymbols() {
@@ -202,7 +207,7 @@ Symbol *ObjectFile::createDefined(const WasmSymbol &Sym,
                                   const InputSegment *Segment) {
   Symbol* S;
   if (Sym.isLocal()) {
-    S = make<Symbol>(Sym.Name);
+    S = make<Symbol>(Sym.Name, true);
     Symbol::Kind Kind;
     if (Sym.Type == WasmSymbol::SymbolType::FUNCTION_EXPORT)
       Kind = Symbol::Kind::DefinedFunctionKind;
@@ -222,8 +227,12 @@ void ArchiveFile::parse() {
   File = check(Archive::create(MB), toString(this));
 
   // Read the symbol table to construct Lazy symbols.
-  for (const Archive::Symbol &Sym : File->symbols())
+  int count = 0;
+  for (const Archive::Symbol &Sym : File->symbols()) {
     Symtab->addLazy(this, &Sym);
+    count++;
+  }
+  DEBUG(dbgs() << "Read " << count << " symbols\n");
 }
 
 void ArchiveFile::addMember(const Archive::Symbol *Sym) {

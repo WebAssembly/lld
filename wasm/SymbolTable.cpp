@@ -67,7 +67,7 @@ std::pair<Symbol *, bool> SymbolTable::insert(StringRef Name) {
   Symbol *&Sym = Symtab[CachedHashStringRef(Name)];
   if (Sym)
     return {Sym, false};
-  Sym = make<Symbol>(Name);
+  Sym = make<Symbol>(Name, false);
   return {Sym, true};
 }
 

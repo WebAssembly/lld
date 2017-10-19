@@ -51,9 +51,6 @@ entry:
 ; CHECK-NEXT:       - Name:            memory
 ; CHECK-NEXT:         Kind:            MEMORY
 ; CHECK-NEXT:         Index:           0
-; CHECK-NEXT:       - Name:            baz
-; CHECK-NEXT:         Kind:            FUNCTION
-; CHECK-NEXT:         Index:           0
 ; CHECK-NEXT:       - Name:            _start
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           1
