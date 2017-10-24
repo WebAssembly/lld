@@ -14,6 +14,10 @@ entry:
   ret i8* bitcast (i32 ()* @foo to i8*)
 }
 
+define hidden i32* @get_address_of_global_var() #0 {
+  ret i32* @global_var
+}
+
 define hidden i32 @_start() #0 {
 entry:
     %0 = load i32, i32* @global_var, align 4
@@ -30,7 +34,7 @@ entry:
 ; CHECK-NEXT:         ReturnType:      I32
 ; CHECK-NEXT:         ParamTypes:
 ; CHECK-NEXT:   - Type:            FUNCTION
-; CHECK-NEXT:     FunctionTypes:   [ 0, 0 ]
+; CHECK-NEXT:     FunctionTypes:   [ 0, 0, 0 ]
 ; CHECK-NEXT:   - Type:            TABLE
 ; CHECK-NEXT:     Tables:          
 ; CHECK-NEXT:       - ElemType:        ANYFUNC
@@ -56,9 +60,12 @@ entry:
 ; CHECK-NEXT:       - Name:            get_address_of_foo
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           0
-; CHECK-NEXT:       - Name:            _start
+; CHECK-NEXT:       - Name:            get_address_of_global_var
 ; CHECK-NEXT:         Kind:            FUNCTION
 ; CHECK-NEXT:         Index:           1
+; CHECK-NEXT:       - Name:            _start
+; CHECK-NEXT:         Kind:            FUNCTION
+; CHECK-NEXT:         Index:           2
 ; CHECK-NEXT:   - Type:            ELEM
 ; CHECK-NEXT:     Segments:        
 ; CHECK-NEXT:       - Offset:          
@@ -69,6 +76,8 @@ entry:
 ; CHECK-NEXT:     Functions:
 ; CHECK-NEXT:       - Locals:
 ; CHECK-NEXT:         Body:            4181808080000B
+; CHECK-NEXT:       - Locals:
+; CHECK-NEXT:         Body:            41FFFFFFFF7F0B
 ; CHECK-NEXT:       - Locals:
 ; CHECK-NEXT:         Body:            41002802FFFFFFFF0F0B
 ; CHECK-NEXT:   - Type:            CUSTOM

@@ -24,7 +24,7 @@ namespace wasm {
 struct OutputRelocation {
   WasmRelocation Reloc;
   uint32_t NewIndex;
-  int64_t Value;
+  uint32_t Value;
 };
 
 void debugWrite(uint64_t offset, Twine msg);

@@ -71,7 +71,8 @@ std::string lld::toString(OutputSection *Section) {
 static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
   DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type
                << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
-               << " offset=" << Reloc.Reloc.Offset << "\n");
+               << " value=" << Reloc.Value << " offset=" << Reloc.Reloc.Offset
+               << "\n");
   switch (Reloc.Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
@@ -85,7 +86,7 @@ static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
     assert(decodeSLEB128(Buf) == Reloc.Reloc.Index);
     LLVM_FALLTHROUGH;
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
-    encodeSLEB128(Reloc.Value, Buf, 5);
+    encodeSLEB128(static_cast<int32_t>(Reloc.Value), Buf, 5);
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_I32:
   case R_WEBASSEMBLY_MEMORY_ADDR_I32:
@@ -152,7 +153,9 @@ static void calcRelocations(const ObjectFile &File,
     case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
     case R_WEBASSEMBLY_MEMORY_ADDR_I32:
     case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
-      NewReloc.Value = File.getRelocatedAddress(Reloc.Index) + Reloc.Addend;
+      NewReloc.Value = File.getRelocatedAddress(Reloc.Index);
+      if (NewReloc.Value != UINT32_MAX)
+        NewReloc.Value += Reloc.Addend;
       break;
     default:
       NewReloc.Value = NewIndex;
