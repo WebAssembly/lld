@@ -47,7 +47,7 @@ static Flavor getFlavor(StringRef S) {
       .CasesLower("ld", "ld.lld", "gnu", Gnu)
       .CasesLower("wasm", "ld-wasm", Wasm)
       .CaseLower("link", WinLink)
-      .CaseLower("darwin", Darwin)
+      .CasesLower("ld64", "ld64.lld", "darwin", Darwin)
       .Default(Invalid);
 }
 
@@ -117,7 +117,7 @@ int main(int Argc, const char **Argv) {
       return !mingw::link(Args);
     return !elf::link(Args, true);
   case WinLink:
-    return !coff::link(Args);
+    return !coff::link(Args, true);
   case Darwin:
     return !mach_o::link(Args);
   case Wasm:

@@ -16,10 +16,10 @@
 
 #include "SymbolTable.h"
 #include "Config.h"
-#include "Error.h"
 #include "LinkerScript.h"
 #include "Memory.h"
 #include "Symbols.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace llvm;
@@ -30,6 +30,14 @@ using namespace lld;
 using namespace lld::elf;
 
 SymbolTable *elf::Symtab;
+
+static InputFile *getFirstElf() {
+  if (!ObjectFiles.empty())
+    return ObjectFiles[0];
+  if (!SharedFiles.empty())
+    return SharedFiles[0];
+  return nullptr;
+}
 
 // All input object files must be for the same architecture
 // (e.g. it does not make sense to link x86 object files with
@@ -48,15 +56,12 @@ template <class ELFT> static bool isCompatible(InputFile *F) {
   if (!Config->Emulation.empty())
     error(toString(F) + " is incompatible with " + Config->Emulation);
   else
-    error(toString(F) + " is incompatible with " + toString(Config->FirstElf));
+    error(toString(F) + " is incompatible with " + toString(getFirstElf()));
   return false;
 }
 
 // Add symbols in File to the symbol table.
 template <class ELFT> void SymbolTable::addFile(InputFile *File) {
-  if (!Config->FirstElf && isa<ELFFileBase<ELFT>>(File))
-    Config->FirstElf = File;
-
   if (!isCompatible<ELFT>(File))
     return;
 
@@ -86,7 +91,7 @@ template <class ELFT> void SymbolTable::addFile(InputFile *File) {
   if (auto *F = dyn_cast<SharedFile<ELFT>>(File)) {
     // DSOs are uniquified not by filename but by soname.
     F->parseSoName();
-    if (ErrorCount || !SoNames.insert(F->SoName).second)
+    if (errorCount() || !SoNames.insert(F->SoName).second)
       return;
     SharedFiles.push_back(F);
     F->parseRest();
@@ -205,7 +210,7 @@ void SymbolTable::applySymbolRenames() {
 
     Symbol *Real = &Origs[I];
     // If __real_foo was undefined, we don't want it in the symbol table.
-    if (Real->body()->isUndefined())
+    if (!Real->body()->isInCurrentDSO())
       continue;
 
     auto *NewSym = make<Symbol>();
@@ -325,8 +330,8 @@ Symbol *SymbolTable::addUndefined(StringRef Name, bool IsLocal, uint8_t Binding,
       SS->getFile<ELFT>()->IsUsed = true;
   }
   if (auto *L = dyn_cast<Lazy>(S->body())) {
-    // An undefined weak will not fetch archive members, but we have to remember
-    // its type. See also comment in addLazyArchive.
+    // An undefined weak will not fetch archive members. See comment on Lazy in
+    // Symbols.h for the details.
     if (S->isWeak())
       L->Type = Type;
     else if (InputFile *F = L->fetch())
@@ -458,9 +463,9 @@ static void reportDuplicate(SymbolBody *Sym, InputSectionBase *ErrSec,
   //   >>>            baz.o in archive libbaz.a
   auto *Sec1 = cast<InputSectionBase>(D->Section);
   std::string Src1 = Sec1->getSrcMsg<ELFT>(D->Value);
-  std::string Obj1 = Sec1->getObjMsg<ELFT>(D->Value);
+  std::string Obj1 = Sec1->getObjMsg(D->Value);
   std::string Src2 = ErrSec->getSrcMsg<ELFT>(ErrOffset);
-  std::string Obj2 = ErrSec->getObjMsg<ELFT>(ErrOffset);
+  std::string Obj2 = ErrSec->getObjMsg(ErrOffset);
 
   std::string Msg = "duplicate symbol: " + toString(*Sym) + "\n>>> defined at ";
   if (!Src1.empty())
@@ -509,8 +514,8 @@ void SymbolTable::addShared(StringRef Name, SharedFile<ELFT> *File,
   SymbolBody *Body = S->body();
   // An undefined symbol with non default visibility must be satisfied
   // in the same DSO.
-  if (WasInserted ||
-      (isa<Undefined>(Body) && Body->getVisibility() == STV_DEFAULT)) {
+  if (WasInserted || ((Body->isUndefined() || Body->isLazy()) &&
+                      Body->getVisibility() == STV_DEFAULT)) {
     replaceBody<SharedSymbol>(S, File, Name, Sym.st_other, Sym.getType(), &Sym,
                               Verdef);
     if (!S->isWeak())
@@ -569,13 +574,8 @@ Symbol *SymbolTable::addLazyArchive(StringRef Name, ArchiveFile *F,
   if (!S->body()->isUndefined())
     return S;
 
-  // Weak undefined symbols should not fetch members from archives. If we were
-  // to keep old symbol we would not know that an archive member was available
-  // if a strong undefined symbol shows up afterwards in the link. If a strong
-  // undefined symbol never shows up, this lazy symbol will get to the end of
-  // the link and must be treated as the weak undefined one. We already marked
-  // this symbol as used when we added it to the symbol table, but we also need
-  // to preserve its type. FIXME: Move the Type field to Symbol.
+  // An undefined weak will not fetch archive members. See comment on Lazy in
+  // Symbols.h for the details.
   if (S->isWeak()) {
     replaceBody<LazyArchive>(S, F, Sym, S->body()->Type);
     return S;
@@ -659,7 +659,7 @@ StringMap<std::vector<SymbolBody *>> &SymbolTable::getDemangledSyms() {
     DemangledSyms.emplace();
     for (Symbol *Sym : SymVector) {
       SymbolBody *B = Sym->body();
-      if (B->isUndefined())
+      if (!B->isInCurrentDSO())
         continue;
       if (Optional<std::string> S = demangle(B->getName()))
         (*DemangledSyms)[*S].push_back(B);
@@ -674,7 +674,7 @@ std::vector<SymbolBody *> SymbolTable::findByVersion(SymbolVersion Ver) {
   if (Ver.IsExternCpp)
     return getDemangledSyms().lookup(Ver.Name);
   if (SymbolBody *B = find(Ver.Name))
-    if (!B->isUndefined())
+    if (B->isInCurrentDSO())
       return {B};
   return {};
 }
@@ -692,7 +692,7 @@ std::vector<SymbolBody *> SymbolTable::findAllByVersion(SymbolVersion Ver) {
 
   for (Symbol *Sym : SymVector) {
     SymbolBody *B = Sym->body();
-    if (!B->isUndefined() && M.match(B->getName()))
+    if (B->isInCurrentDSO() && M.match(B->getName()))
       Res.push_back(B);
   }
   return Res;

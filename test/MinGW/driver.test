@@ -38,6 +38,7 @@ RUN: ld.lld -### foo.o -m i386pep -o bar.exe | FileCheck -check-prefix=OUT %s
 OUT: -out:bar.exe
 
 RUN: ld.lld -### foo.o -m i386pep --out-implib bar | FileCheck -check-prefix=IMPLIB %s
+RUN: ld.lld -### foo.o -m i386pep --out-implib=bar | FileCheck -check-prefix=IMPLIB %s
 IMPLIB: -implib:bar
 
 RUN: ld.lld -### foo.o -m i386pep -out-implib bar | FileCheck -check-prefix=NOIMPLIB %s
@@ -72,3 +73,9 @@ WHOLE-ARCHIVE: foo.o -wholearchive:bar.a baz.a
 
 RUN: ld.lld -### -m i386pep foo.o | FileCheck -check-prefix MINGW-FLAG %s
 MINGW-FLAG: -lldmingw
+
+RUN: ld.lld -### -m i386pep foo.o --export-all-symbols | FileCheck -check-prefix EXPORT-ALL %s
+EXPORT-ALL: -export-all-symbols
+
+RUN: ld.lld -### -m i386pep foo.o --output-def out.def | FileCheck -check-prefix OUTPUT-DEF %s
+OUTPUT-DEF: -output-def:out.def

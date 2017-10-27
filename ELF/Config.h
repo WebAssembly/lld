@@ -46,6 +46,9 @@ enum class StripPolicy { None, All, Debug };
 // For --unresolved-symbols.
 enum class UnresolvedPolicy { ReportError, Warn, Ignore, IgnoreAll };
 
+// For --orphan-handling.
+enum class OrphanHandlingPolicy { Place, Warn, Error };
+
 // For --sort-section and linkerscript sorting rules.
 enum class SortSectionPolicy { Default, None, Alignment, Name, Priority };
 
@@ -72,7 +75,6 @@ struct VersionDefinition {
 // and such fields have the same name as the corresponding options.
 // Most fields are initialized by the driver.
 struct Configuration {
-  InputFile *FirstElf = nullptr;
   uint8_t OSABI = 0;
   llvm::CachePruningPolicy ThinLTOCachePolicy;
   llvm::StringMap<uint64_t> SectionStartMap;
@@ -103,10 +105,10 @@ struct Configuration {
   std::vector<SymbolVersion> VersionScriptLocals;
   std::vector<uint8_t> BuildIdVector;
   bool AllowMultipleDefinition;
+  bool AndroidPackDynRelocs = false;
   bool AsNeeded = false;
   bool Bsymbolic;
   bool BsymbolicFunctions;
-  bool ColorDiagnostics = false;
   bool CompressDebugSections;
   bool DefineCommon;
   bool Demangle = true;
@@ -115,7 +117,6 @@ struct Configuration {
   bool EmitRelocs;
   bool EnableNewDtags;
   bool ExportDynamic;
-  bool FatalWarnings;
   bool GcSections;
   bool GdbIndex;
   bool GnuHash = false;
@@ -139,7 +140,6 @@ struct Configuration {
   bool Static = false;
   bool SysvHash = false;
   bool Target1Rel;
-  bool Threads;
   bool Trace;
   bool Verbose;
   bool WarnCommon;
@@ -157,6 +157,7 @@ struct Configuration {
   bool ExitEarly;
   bool ZWxneeded;
   DiscardPolicy Discard;
+  OrphanHandlingPolicy OrphanHandling;
   SortSectionPolicy SortSection;
   StripPolicy Strip;
   UnresolvedPolicy UnresolvedSymbols;
@@ -165,7 +166,6 @@ struct Configuration {
   ELFKind EKind = ELFNoneKind;
   uint16_t DefaultSymbolVersion = llvm::ELF::VER_NDX_GLOBAL;
   uint16_t EMachine = llvm::ELF::EM_NONE;
-  uint64_t ErrorLimit = 20;
   llvm::Optional<uint64_t> ImageBase;
   uint64_t MaxPageSize;
   uint64_t ZStackSize;
@@ -204,11 +204,8 @@ struct Configuration {
   // if that's true.)
   bool IsMips64EL;
 
-  // Holds set of ELF header flags for MIPS targets. The set calculated
-  // by the `elf::calcMipsEFlags` function and cached in this field. For
-  // the calculation we iterate over all input object files and combine
-  // their ELF flags.
-  uint32_t MipsEFlags = 0;
+  // Holds set of ELF header flags for the target.
+  uint32_t EFlags = 0;
 
   // The ELF spec defines two types of relocation table entries, RELA and
   // REL. RELA is a triplet of (offset, info, addend) while REL is a

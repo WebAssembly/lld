@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "Symbols.h"
-#include "Error.h"
 #include "InputFiles.h"
 #include "InputSection.h"
 #include "OutputSections.h"
@@ -17,6 +16,7 @@
 #include "Target.h"
 #include "Writer.h"
 
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Path.h"
 #include <cstring>
@@ -121,15 +121,15 @@ static uint64_t getSymVA(const SymbolBody &Body, int64_t &Addend) {
 
 SymbolBody::SymbolBody(Kind K, StringRefZ Name, bool IsLocal, uint8_t StOther,
                        uint8_t Type)
-    : SymbolKind(K), NeedsPltAddr(false), IsLocal(IsLocal),
+    : SymbolKind(K), IsLocal(IsLocal), NeedsPltAddr(false),
       IsInGlobalMipsGot(false), Is32BitMipsGot(false), IsInIplt(false),
       IsInIgot(false), IsPreemptible(false), Type(Type), StOther(StOther),
       Name(Name) {}
 
+// Returns true if this is a weak undefined symbol.
 bool SymbolBody::isUndefWeak() const {
-  if (isLocal())
-    return false;
-  return symbol()->isWeak() && (isUndefined() || isLazy());
+  // See comment on Lazy in Symbols.h for the details.
+  return !isLocal() && symbol()->isWeak() && (isUndefined() || isLazy());
 }
 
 InputFile *SymbolBody::getFile() const {

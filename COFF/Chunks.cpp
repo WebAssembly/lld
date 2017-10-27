@@ -8,10 +8,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Chunks.h"
-#include "Error.h"
 #include "InputFiles.h"
 #include "Symbols.h"
 #include "Writer.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/Object/COFF.h"
@@ -222,6 +222,7 @@ void SectionChunk::applyRelARM64(uint8_t *Off, uint16_t Type, OutputSection *OS,
   case IMAGE_REL_ARM64_PAGEOFFSET_12L: applyArm64Ldr(Off, S & 0xfff); break;
   case IMAGE_REL_ARM64_BRANCH26:       or32(Off, ((S - P) & 0x0FFFFFFC) >> 2); break;
   case IMAGE_REL_ARM64_ADDR32:         add32(Off, S + Config->ImageBase); break;
+  case IMAGE_REL_ARM64_ADDR32NB:       add32(Off, S); break;
   case IMAGE_REL_ARM64_ADDR64:         add64(Off, S + Config->ImageBase); break;
   default:
     fatal("unsupported relocation type 0x" + Twine::utohexstr(Type));

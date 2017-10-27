@@ -62,21 +62,22 @@ public:
   bool isUndefined() const { return SymbolKind == UndefinedKind; }
   bool isDefined() const { return SymbolKind <= DefinedLast; }
   bool isCommon() const { return SymbolKind == DefinedCommonKind; }
+  bool isShared() const { return SymbolKind == SharedKind; }
+  bool isLocal() const { return IsLocal; }
+
   bool isLazy() const {
     return SymbolKind == LazyArchiveKind || SymbolKind == LazyObjectKind;
   }
-  bool isShared() const { return SymbolKind == SharedKind; }
+
   bool isInCurrentDSO() const {
-    return !isUndefined() && !isShared() && !isLazy();
+    return SymbolKind == DefinedRegularKind || SymbolKind == DefinedCommonKind;
   }
-  bool isLocal() const { return IsLocal; }
 
   // True is this is an undefined weak symbol. This only works once
   // all input files have been added.
   bool isUndefWeak() const;
 
   InputFile *getFile() const;
-  bool isPreemptible() const { return IsPreemptible; }
   StringRef getName() const { return Name; }
   uint8_t getVisibility() const { return StOther & 0x3; }
   void parseSymbolVersion();
@@ -107,14 +108,13 @@ protected:
 
   const unsigned SymbolKind : 8;
 
+  // True if this is a local symbol.
+  unsigned IsLocal : 1;
+
 public:
   // True the symbol should point to its PLT entry.
   // For SharedSymbol only.
   unsigned NeedsPltAddr : 1;
-
-  // True if this is a local symbol.
-  unsigned IsLocal : 1;
-
   // True if this symbol has an entry in the global part of MIPS GOT.
   unsigned IsInGlobalMipsGot : 1;
 
@@ -215,8 +215,23 @@ public:
                const void *ElfSym, const void *Verdef)
       : Defined(SymbolBody::SharedKind, Name, /*IsLocal=*/false, StOther, Type),
         Verdef(Verdef), ElfSym(ElfSym) {
-    // IFuncs defined in DSOs are treated as functions by the static linker.
-    if (isGnuIFunc())
+    // GNU ifunc is a mechanism to allow user-supplied functions to
+    // resolve PLT slot values at load-time. This is contrary to the
+    // regualr symbol resolution scheme in which symbols are resolved just
+    // by name. Using this hook, you can program how symbols are solved
+    // for you program. For example, you can make "memcpy" to be resolved
+    // to a SSE-enabled version of memcpy only when a machine running the
+    // program supports the SSE instruction set.
+    //
+    // Naturally, such symbols should always be called through their PLT
+    // slots. What GNU ifunc symbols point to are resolver functions, and
+    // calling them directly doesn't make sense (unless you are writing a
+    // loader).
+    //
+    // For DSO symbols, we always call them through PLT slots anyway.
+    // So there's no difference between GNU ifunc and regular function
+    // symbols if they are in DSOs. So we can handle GNU_IFUNC as FUNC.
+    if (this->Type == llvm::ELF::STT_GNU_IFUNC)
       this->Type = llvm::ELF::STT_FUNC;
   }
 
@@ -241,8 +256,8 @@ public:
   // This field is a pointer to the symbol's version definition.
   const void *Verdef;
 
-  // CopyRelSec and CopyRelSecOff are significant only when NeedsCopy is true.
-  InputSection *CopyRelSec;
+  // If not null, there is a copy relocation to this section.
+  InputSection *CopyRelSec = nullptr;
 
 private:
   template <class ELFT> const typename ELFT::Sym &getSym() const {
@@ -252,11 +267,15 @@ private:
   const void *ElfSym;
 };
 
-// This class represents a symbol defined in an archive file. It is
-// created from an archive file header, and it knows how to load an
-// object file from an archive to replace itself with a defined
-// symbol. If the resolver finds both Undefined and Lazy for
-// the same name, it will ask the Lazy to load a file.
+// This represents a symbol that is not yet in the link, but we know where to
+// find it if needed. If the resolver finds both Undefined and Lazy for the same
+// name, it will ask the Lazy to load a file.
+//
+// A special complication is the handling of weak undefined symbols. They should
+// not load a file, but we have to remember we have seen both the weak undefined
+// and the lazy. We represent that with a lazy symbol with a weak binding. This
+// means that code looking for undefined symbols normally also has to take lazy
+// symbols into consideration.
 class Lazy : public SymbolBody {
 public:
   static bool classof(const SymbolBody *S) { return S->isLazy(); }
@@ -270,7 +289,10 @@ protected:
       : SymbolBody(K, Name, /*IsLocal=*/false, llvm::ELF::STV_DEFAULT, Type) {}
 };
 
-// LazyArchive symbols represents symbols in archive files.
+// This class represents a symbol defined in an archive file. It is
+// created from an archive file header, and it knows how to load an
+// object file from an archive to replace itself with a defined
+// symbol.
 class LazyArchive : public Lazy {
 public:
   LazyArchive(const llvm::object::Archive::Symbol S, uint8_t Type);

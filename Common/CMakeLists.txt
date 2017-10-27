@@ -3,8 +3,10 @@ if(NOT LLD_BUILT_STANDALONE)
 endif()
 
 add_lld_library(lldCommon
+  ErrorHandler.cpp
   Reproduce.cpp
   TargetOptionsCommandFlags.cpp
+  Threads.cpp
   Version.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -16,6 +18,9 @@ add_lld_library(lldCommon
   Option
   Support
   Target
+
+  LINK_LIBS
+  ${LLVM_PTHREAD_LIB}
 
   DEPENDS
   ${tablegen_deps}

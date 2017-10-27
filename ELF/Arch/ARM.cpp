@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Error.h"
 #include "InputFiles.h"
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
 #include "Thunks.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Support/Endian.h"
 
@@ -26,11 +26,12 @@ namespace {
 class ARM final : public TargetInfo {
 public:
   ARM();
-  RelExpr getRelExpr(uint32_t Type, const SymbolBody &S, const InputFile &File,
+  uint32_t calcEFlags() const override;
+  RelExpr getRelExpr(RelType Type, const SymbolBody &S,
                      const uint8_t *Loc) const override;
-  bool isPicRel(uint32_t Type) const override;
-  uint32_t getDynRel(uint32_t Type) const override;
-  int64_t getImplicitAddend(const uint8_t *Buf, uint32_t Type) const override;
+  bool isPicRel(RelType Type) const override;
+  RelType getDynRel(RelType Type) const override;
+  int64_t getImplicitAddend(const uint8_t *Buf, RelType Type) const override;
   void writeGotPlt(uint8_t *Buf, const SymbolBody &S) const override;
   void writeIgotPlt(uint8_t *Buf, const SymbolBody &S) const override;
   void writePltHeader(uint8_t *Buf) const override;
@@ -38,11 +39,10 @@ public:
                 int32_t Index, unsigned RelOff) const override;
   void addPltSymbols(InputSectionBase *IS, uint64_t Off) const override;
   void addPltHeaderSymbols(InputSectionBase *ISD) const override;
-  bool needsThunk(RelExpr Expr, uint32_t RelocType, const InputFile *File,
-                  const SymbolBody &S) const override;
-  bool inBranchRange(uint32_t RelocType, uint64_t Src,
-                     uint64_t Dst) const override;
-  void relocateOne(uint8_t *Loc, uint32_t Type, uint64_t Val) const override;
+  bool needsThunk(RelExpr Expr, RelType Type, const InputFile *File,
+                  uint64_t BranchAddr, const SymbolBody &S) const override;
+  bool inBranchRange(RelType Type, uint64_t Src, uint64_t Dst) const override;
+  void relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const override;
 };
 } // namespace
 
@@ -63,13 +63,49 @@ ARM::ARM() {
   // ARM uses Variant 1 TLS
   TcbSize = 8;
   NeedsThunks = true;
+
+  // The placing of pre-created ThunkSections is controlled by the
+  // ThunkSectionSpacing parameter. The aim is to place the
+  // ThunkSection such that all branches from the InputSections prior to the
+  // ThunkSection can reach a Thunk placed at the end of the ThunkSection.
+  // Graphically:
+  // | up to ThunkSectionSpacing .text input sections |
+  // | ThunkSection                                   |
+  // | up to ThunkSectionSpacing .text input sections |
+  // | ThunkSection                                   |
+
+  // Pre-created ThunkSections are spaced roughly 16MiB apart on ARM. This is to
+  // match the most common expected case of a Thumb 2 encoded BL, BLX or B.W
+  // ARM B, BL, BLX range +/- 32MiB
+  // Thumb B.W, BL, BLX range +/- 16MiB
+  // Thumb B<cc>.W range +/- 1MiB
+  // If a branch cannot reach a pre-created ThunkSection a new one will be
+  // created so we can handle the rare cases of a Thumb 2 conditional branch.
+  // We intentionally use a lower size for ThunkSectionSpacing than the maximum
+  // branch range so the end of the ThunkSection is more likely to be within
+  // range of the branch instruction that is furthest away. The value we shorten
+  // ThunkSectionSpacing by is set conservatively to allow us to create 16,384
+  // 12 byte Thunks at any offset in a ThunkSection without risk of a branch to
+  // one of the Thunks going out of range.
+
+  // FIXME: lld assumes that the Thumb BL and BLX encoding permits the J1 and
+  // J2 bits to be used to extend the branch range. On earlier Architectures
+  // such as ARMv4, ARMv5 and ARMv6 (except ARMv6T2) the range is +/- 4MiB. If
+  // support for the earlier encodings is added then when they are used the
+  // ThunkSectionSpacing will need lowering.
+  ThunkSectionSpacing = 0x1000000 - 0x30000;
 }
 
-RelExpr ARM::getRelExpr(uint32_t Type, const SymbolBody &S,
-                        const InputFile &File, const uint8_t *Loc) const {
+uint32_t ARM::calcEFlags() const {
+  // We don't currently use any features incompatible with EF_ARM_EABI_VER5,
+  // but we don't have any firm guarantees of conformance. Linux AArch64
+  // kernels (as of 2016) require an EABI version to be set.
+  return EF_ARM_EABI_VER5;
+}
+
+RelExpr ARM::getRelExpr(RelType Type, const SymbolBody &S,
+                        const uint8_t *Loc) const {
   switch (Type) {
-  default:
-    return R_ABS;
   case R_ARM_THM_JUMP11:
     return R_PC;
   case R_ARM_CALL:
@@ -120,15 +156,17 @@ RelExpr ARM::getRelExpr(uint32_t Type, const SymbolBody &S,
     return R_NONE;
   case R_ARM_TLS_LE32:
     return R_TLS;
+  default:
+    return R_ABS;
   }
 }
 
-bool ARM::isPicRel(uint32_t Type) const {
+bool ARM::isPicRel(RelType Type) const {
   return (Type == R_ARM_TARGET1 && !Config->Target1Rel) ||
          (Type == R_ARM_ABS32);
 }
 
-uint32_t ARM::getDynRel(uint32_t Type) const {
+RelType ARM::getDynRel(RelType Type) const {
   if (Type == R_ARM_TARGET1 && !Config->Target1Rel)
     return R_ARM_ABS32;
   if (Type == R_ARM_ABS32)
@@ -189,8 +227,8 @@ void ARM::addPltSymbols(InputSectionBase *ISD, uint64_t Off) const {
   addSyntheticLocal("$d", STT_NOTYPE, Off + 12, 0, IS);
 }
 
-bool ARM::needsThunk(RelExpr Expr, uint32_t RelocType, const InputFile *File,
-                     const SymbolBody &S) const {
+bool ARM::needsThunk(RelExpr Expr, RelType Type, const InputFile *File,
+                     uint64_t BranchAddr, const SymbolBody &S) const {
   // If S is an undefined weak symbol in an executable we don't need a Thunk.
   // In a DSO calls to undefined symbols, including weak ones get PLT entries
   // which may need a thunk.
@@ -199,7 +237,7 @@ bool ARM::needsThunk(RelExpr Expr, uint32_t RelocType, const InputFile *File,
   // A state change from ARM to Thumb and vice versa must go through an
   // interworking thunk if the relocation type is not R_ARM_CALL or
   // R_ARM_THM_CALL.
-  switch (RelocType) {
+  switch (Type) {
   case R_ARM_PC24:
   case R_ARM_PLT32:
   case R_ARM_JUMP24:
@@ -207,23 +245,31 @@ bool ARM::needsThunk(RelExpr Expr, uint32_t RelocType, const InputFile *File,
     // Otherwise we need to interwork if Symbol has bit 0 set (Thumb).
     if (Expr == R_PC && ((S.getVA() & 1) == 1))
       return true;
-    break;
+    LLVM_FALLTHROUGH;
+  case R_ARM_CALL: {
+    uint64_t Dst = (Expr == R_PLT_PC) ? S.getPltVA() : S.getVA();
+    return !inBranchRange(Type, BranchAddr, Dst);
+  }
   case R_ARM_THM_JUMP19:
   case R_ARM_THM_JUMP24:
     // Source is Thumb, all PLT entries are ARM so interworking is required.
     // Otherwise we need to interwork if Symbol has bit 0 clear (ARM).
     if (Expr == R_PLT_PC || ((S.getVA() & 1) == 0))
       return true;
-    break;
+    LLVM_FALLTHROUGH;
+  case R_ARM_THM_CALL: {
+    uint64_t Dst = (Expr == R_PLT_PC) ? S.getPltVA() : S.getVA();
+    return !inBranchRange(Type, BranchAddr, Dst);
+  }
   }
   return false;
 }
 
-bool ARM::inBranchRange(uint32_t RelocType, uint64_t Src, uint64_t Dst) const {
+bool ARM::inBranchRange(RelType Type, uint64_t Src, uint64_t Dst) const {
   uint64_t Range;
   uint64_t InstrSize;
 
-  switch (RelocType) {
+  switch (Type) {
   case R_ARM_PC24:
   case R_ARM_PLT32:
   case R_ARM_JUMP24:
@@ -262,7 +308,7 @@ bool ARM::inBranchRange(uint32_t RelocType, uint64_t Src, uint64_t Dst) const {
   return Distance <= Range;
 }
 
-void ARM::relocateOne(uint8_t *Loc, uint32_t Type, uint64_t Val) const {
+void ARM::relocateOne(uint8_t *Loc, RelType Type, uint64_t Val) const {
   switch (Type) {
   case R_ARM_ABS32:
   case R_ARM_BASE_PREL:
@@ -399,7 +445,7 @@ void ARM::relocateOne(uint8_t *Loc, uint32_t Type, uint64_t Val) const {
   }
 }
 
-int64_t ARM::getImplicitAddend(const uint8_t *Buf, uint32_t Type) const {
+int64_t ARM::getImplicitAddend(const uint8_t *Buf, RelType Type) const {
   switch (Type) {
   default:
     return 0;
