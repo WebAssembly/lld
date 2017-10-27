@@ -10,17 +10,18 @@
 #include "OutputSections.h"
 
 #include "Config.h"
-#include "Error.h"
 #include "InputFiles.h"
 #include "Memory.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/LEB128.h"
 
 #define DEBUG_TYPE "lld"
 
 using namespace llvm;
+using namespace lld;
 using namespace lld::wasm;
 
 enum class RelocEncoding {

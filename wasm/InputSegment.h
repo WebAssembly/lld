@@ -10,7 +10,7 @@
 #ifndef LLD_WASM_INPUT_SEGMENT_H
 #define LLD_WASM_INPUT_SEGMENT_H
 
-#include "Error.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/Wasm.h"
 
 using llvm::object::WasmSegment;

@@ -10,9 +10,9 @@
 #ifndef LLD_WASM_OUTPUT_SECTIONS_H
 #define LLD_WASM_OUTPUT_SECTIONS_H
 
-#include "Error.h"
 #include "InputSegment.h"
 #include "WriterUtils.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/DenseMap.h"
 
 namespace lld {

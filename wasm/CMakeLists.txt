@@ -4,7 +4,6 @@ add_public_tablegen_target(WasmOptionsTableGen)
 
 add_lld_library(lldWasm
   Driver.cpp
-  Error.cpp
   InputFiles.cpp
   InputSegment.cpp
   OutputSections.cpp

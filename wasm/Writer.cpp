@@ -10,13 +10,13 @@
 #include "Writer.h"
 
 #include "Config.h"
-#include "Error.h"
 #include "Memory.h"
 #include "OutputSections.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Threads.h"
 #include "WriterUtils.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -731,14 +731,14 @@ void Writer::run() {
 
   log("-- openFile");
   openFile();
-  if (ErrorCount)
+  if (errorCount())
     return;
 
   writeHeader();
 
   log("-- writeSections");
   writeSections();
-  if (ErrorCount)
+  if (errorCount())
     return;
 
   if (auto EC = Buffer->commit())

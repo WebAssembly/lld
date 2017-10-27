@@ -10,10 +10,10 @@
 #include "Symbols.h"
 
 #include "Config.h"
-#include "Error.h"
 #include "InputFiles.h"
 #include "InputSegment.h"
 #include "Strings.h"
+#include "lld/Common/ErrorHandler.h"
 
 #define DEBUG_TYPE "lld"
 

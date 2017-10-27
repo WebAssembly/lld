@@ -7,13 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "lld/Common/Driver.h"
 #include "Config.h"
-#include "Error.h"
 #include "Memory.h"
 #include "SymbolTable.h"
 #include "Writer.h"
+#include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Version.h"
-#include "lld/Common/Driver.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Option/ArgList.h"
@@ -25,6 +25,9 @@ using namespace llvm;
 using namespace llvm::sys;
 using namespace llvm::wasm;
 using llvm::sys::Process;
+
+using namespace lld;
+using namespace lld::wasm;
 
 namespace lld {
 namespace wasm {
@@ -59,16 +62,23 @@ std::vector<SpecificAllocBase *> SpecificAllocBase::Instances;
 Configuration *Config;
 LinkerDriver *Driver;
 
-bool link(ArrayRef<const char *> Args, raw_ostream &Error) {
-  ErrorCount = 0;
-  Argv0 = Args[0];
-  ErrorOS = &Error;
+} // namespace wasm
+} // namespace lld
+
+bool lld::wasm::link(ArrayRef<const char *> Args, raw_ostream &Error) {
+  errorHandler().LogName = Args[0];
+  errorHandler().ErrorOS = &Error;
+  errorHandler().ColorDiagnostics = Error.has_colors();
+  errorHandler().ErrorLimitExceededMsg =
+      "too many errors emitted, stopping now (use "
+      "-error-limit=0 to see all errors)";
+
   Config = make<Configuration>();
   Driver = make<LinkerDriver>();
   Symtab = make<SymbolTable>();
 
   Driver->link(Args);
-  return !ErrorCount;
+  return !errorCount();
 }
 
 // Create OptTable
@@ -133,25 +143,27 @@ static std::vector<StringRef> getLines(MemoryBufferRef MB) {
   return Ret;
 }
 
-// Parse -color-diagnostics={auto,always,never} or -no-color-diagnostics.
-static bool getColorDiagnostics(opt::InputArgList &Args) {
+// Set color diagnostics according to -color-diagnostics={auto,always,never}
+// or -no-color-diagnostics flags.
+static void handleColorDiagnostics(opt::InputArgList &Args) {
   auto *Arg = Args.getLastArg(OPT_color_diagnostics, OPT_color_diagnostics_eq,
                               OPT_no_color_diagnostics);
   if (!Arg)
-    return ErrorOS->has_colors();
-  if (Arg->getOption().getID() == OPT_color_diagnostics)
-    return true;
-  if (Arg->getOption().getID() == OPT_no_color_diagnostics)
-    return false;
+    return;
 
-  StringRef S = Arg->getValue();
-  if (S == "auto")
-    return ErrorOS->has_colors();
-  if (S == "always")
-    return true;
-  if (S != "never")
-    error("unknown option: -color-diagnostics=" + S);
-  return false;
+  if (Arg->getOption().getID() == OPT_color_diagnostics)
+    errorHandler().ColorDiagnostics = true;
+  else if (Arg->getOption().getID() == OPT_no_color_diagnostics)
+    errorHandler().ColorDiagnostics = false;
+  else {
+    StringRef S = Arg->getValue();
+    if (S == "always")
+      errorHandler().ColorDiagnostics = true;
+    if (S == "never")
+      errorHandler().ColorDiagnostics = false;
+    if (S != "auto")
+      error("unknown option: -color-diagnostics=" + S);
+  }
 }
 
 // Find a file by concatenating given paths.
@@ -201,6 +213,7 @@ opt::InputArgList WasmOptTable::parse(ArrayRef<const char *> Argv) {
   unsigned MissingCount;
   opt::InputArgList Args = this->ParseArgs(Vec, MissingIndex, MissingCount);
 
+  handleColorDiagnostics(Args);
   for (auto *Arg : Args.filtered(OPT_UNKNOWN))
     error("unknown argument: " + Arg->getSpelling());
   return Args;
@@ -263,7 +276,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     V.push_back(Arg->getValue());
   cl::ParseCommandLineOptions(V.size(), V.data());
 
-  Config->ColorDiagnostics = getColorDiagnostics(Args);
+  errorHandler().ErrorLimit = getInteger(Args, OPT_error_limit, 20);
 
   if (Args.hasArg(OPT_version) || Args.hasArg(OPT_v)) {
     outs() << getLLDVersion() << "\n";
@@ -284,7 +297,6 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->Threads = !Args.hasArg(OPT_no_threads);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);
-  Config->ErrorLimit = getInteger(Args, OPT_error_limit, 20);
   Config->GlobalBase = getInteger(Args, OPT_global_base, 1024);
   Config->MaxMemory = getInteger(Args, OPT_max_memory, 0);
   Config->ZStackSize = getZOptionValue(Args, "stack-size", WasmPageSize);
@@ -312,7 +324,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   }
 
   createFiles(Args);
-  if (ErrorCount)
+  if (errorCount())
     return;
 
   // Add all files to the symbol table. This will add almost all
@@ -323,7 +335,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Make sure we have resolved all symbols.
   if (!Config->Relocatable && !Config->AllowUndefined) {
     Symtab->reportRemainingUndefines();
-    if (ErrorCount)
+    if (errorCount())
       return;
   }
 
@@ -336,6 +348,3 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   // Write the result to the file.
   writeResult();
 }
-
-} // namespace wasm
-} // namespace lld

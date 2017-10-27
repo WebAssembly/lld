@@ -24,7 +24,6 @@ namespace wasm {
 
 struct Configuration {
   bool AllowUndefined = false;
-  bool ColorDiagnostics = false;
   bool Demangle = true;
   bool EmitRelocs = false;
   bool ImportMemory = false;
@@ -37,7 +36,6 @@ struct Configuration {
   uint32_t MaxMemory = 0;
   uint32_t GlobalBase = 0;
   uint32_t InitialMemory = 0;
-  uint64_t ErrorLimit = 0;
   llvm::StringRef Entry;
   llvm::StringRef Sysroot;
   llvm::StringRef OutputFile;

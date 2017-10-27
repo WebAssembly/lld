@@ -10,7 +10,7 @@
 #ifndef LLD_WASM_OUTPUT_SEGMENT_H
 #define LLD_WASM_OUTPUT_SEGMENT_H
 
-#include "Error.h"
+#include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/Wasm.h"
 
 namespace lld {
