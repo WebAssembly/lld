@@ -121,7 +121,7 @@ int main(int Argc, const char **Argv) {
   case Darwin:
     return !mach_o::link(Args);
   case Wasm:
-    return !wasm::link(Args);
+    return !wasm::link(Args, true);
   default:
     die("lld is a generic driver.\n"
         "Invoke ld.lld (Unix), ld (macOS) or lld-link (Windows) instead.");

@@ -31,9 +31,9 @@ using namespace llvm::wasm;
 using namespace lld;
 using namespace lld::wasm;
 
-namespace {
-
 static const int kStackAlignment = 16;
+
+namespace {
 
 // Needed for WasmSignatureDenseMapInfo
 bool operator==(const WasmSignature &LHS, const WasmSignature &RHS) {

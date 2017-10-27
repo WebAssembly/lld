@@ -66,7 +66,10 @@ LinkerDriver *Driver;
 } // namespace wasm
 } // namespace lld
 
-bool lld::wasm::link(ArrayRef<const char *> Args, raw_ostream &Error) {
+BumpPtrAllocator lld::wasm::BAlloc;
+
+bool lld::wasm::link(ArrayRef<const char *> Args, bool CanExitEarly,
+                     raw_ostream &Error) {
   errorHandler().LogName = Args[0];
   errorHandler().ErrorOS = &Error;
   errorHandler().ColorDiagnostics = Error.has_colors();
@@ -79,6 +82,14 @@ bool lld::wasm::link(ArrayRef<const char *> Args, raw_ostream &Error) {
   Symtab = make<SymbolTable>();
 
   Driver->link(Args);
+
+  // Exit immediately if we don't need to return to the caller.
+  // This saves time because the overhead of calling destructors
+  // for all globally-allocated objects is not negligible.
+  if (CanExitEarly)
+    exitLld(errorCount() ? 1 : 0);
+
+  freeArena();
   return !errorCount();
 }
 

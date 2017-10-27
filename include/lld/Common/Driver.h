@@ -35,7 +35,7 @@ bool link(llvm::ArrayRef<const char *> Args,
 }
 
 namespace wasm {
-bool link(llvm::ArrayRef<const char *> Args,
+bool link(llvm::ArrayRef<const char *> Args, bool CanExitEarly,
           llvm::raw_ostream &Diag = llvm::errs());
 }
 }
