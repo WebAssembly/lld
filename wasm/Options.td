@@ -32,6 +32,8 @@ def no_color_diagnostics: F<"no-color-diagnostics">,
 def o: JoinedOrSeparate<["-"], "o">, MetaVarName<"<path>">,
   HelpText<"Path to file to write output">;
 
+def threads: F<"threads">, HelpText<"Run the linker multi-threaded">;
+
 def v: Flag<["-"], "v">, HelpText<"Display the version number">;
 
 def version: F<"version">, HelpText<"Display the version number and exit">;

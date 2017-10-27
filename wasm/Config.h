@@ -31,7 +31,6 @@ struct Configuration {
   bool Verbose = false;
   bool StripDebug = false;
   bool StripAll = false;
-  bool Threads = false;
   uint32_t ZStackSize = 0;
   uint32_t MaxMemory = 0;
   uint32_t GlobalBase = 0;

@@ -13,6 +13,7 @@
 #include "SymbolTable.h"
 #include "Writer.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/Threads.h"
 #include "lld/Common/Version.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Object/Wasm.h"
@@ -294,7 +295,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->StripDebug = Args.hasArg(OPT_strip_debug);
   Config->Sysroot = Args.getLastArgValue(OPT_sysroot);
   Config->Verbose = Args.hasArg(OPT_verbose);
-  Config->Threads = !Args.hasArg(OPT_no_threads);
+  ThreadsEnabled = Args.hasFlag(OPT_threads, OPT_no_threads, true);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);
   Config->GlobalBase = getInteger(Args, OPT_global_base, 1024);
