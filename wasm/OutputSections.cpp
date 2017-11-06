@@ -67,7 +67,7 @@ std::string lld::toString(OutputSection *Section) {
   if (!Section->Name.empty())
     rtn += "(" + Section->Name + ")";
   return rtn;
-};
+}
 
 static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
   DEBUG(dbgs() << "write reloc: type=" << Reloc.Reloc.Type

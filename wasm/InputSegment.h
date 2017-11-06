@@ -32,7 +32,7 @@ public:
   uint32_t translateVA(uint32_t Address) const;
 
   const OutputSegment *getOutputSegment() const {
-    return OutputSegment;
+    return OutputSeg;
   }
 
   uint32_t getOutputSegmentOffset() const {
@@ -44,7 +44,7 @@ public:
   }
 
   void setOutputSegment(const OutputSegment* Segment, uint32_t Offset) {
-    OutputSegment = Segment;
+    OutputSeg = Segment;
     OutputSegmentOffset = Offset;
   }
 
@@ -59,7 +59,7 @@ public:
   std::vector<WasmRelocation> Relocations;
 
 protected:
-  const OutputSegment *OutputSegment = nullptr;
+  const OutputSegment *OutputSeg = nullptr;
   uint32_t OutputSegmentOffset = 0;
 };
 

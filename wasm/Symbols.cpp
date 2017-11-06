@@ -102,6 +102,7 @@ std::string toString(wasm::Symbol::Kind &Kind) {
   case wasm::Symbol::LazyKind:
     return "LazyKind";
   }
+  llvm_unreachable("Invalid symbol kind!");
 }
 
 } // namespace lld
