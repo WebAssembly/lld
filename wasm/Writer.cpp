@@ -132,7 +132,7 @@ private:
 } // anonymous namespace
 
 static void debugPrint(const char *fmt, ...) {
-  if (!Config->Verbose)
+  if (!errorHandler().Verbose)
     return;
   fprintf(stderr, "lld: ");
   va_list ap;
@@ -709,7 +709,7 @@ void Writer::run() {
   log("-- calculateOffsets");
   calculateOffsets();
 
-  if (Config->Verbose) {
+  if (errorHandler().Verbose) {
     log("NumFunctions    : " + Twine(NumFunctions));
     log("NumGlobals      : " + Twine(NumGlobals));
     log("NumImports      : " +

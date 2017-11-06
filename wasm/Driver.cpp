@@ -305,7 +305,7 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
   Config->StripAll = Args.hasArg(OPT_strip_all);
   Config->StripDebug = Args.hasArg(OPT_strip_debug);
   Config->Sysroot = Args.getLastArgValue(OPT_sysroot);
-  Config->Verbose = Args.hasArg(OPT_verbose);
+  errorHandler().Verbose = Args.hasArg(OPT_verbose);
   ThreadsEnabled = Args.hasFlag(OPT_threads, OPT_no_threads, true);
 
   Config->InitialMemory = getInteger(Args, OPT_initial_memory, 0);

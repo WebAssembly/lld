@@ -28,7 +28,6 @@ struct Configuration {
   bool EmitRelocs = false;
   bool ImportMemory = false;
   bool Relocatable = false;
-  bool Verbose = false;
   bool StripDebug = false;
   bool StripAll = false;
   uint32_t ZStackSize = 0;
