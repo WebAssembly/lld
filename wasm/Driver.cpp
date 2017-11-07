@@ -149,7 +149,7 @@ static std::vector<StringRef> getLines(MemoryBufferRef MB) {
   std::vector<StringRef> Ret;
   for (StringRef S : Arr) {
     S = S.trim();
-    if (!S.empty())
+    if (!S.empty() && S[0] != '#')
       Ret.push_back(S);
   }
   return Ret;
