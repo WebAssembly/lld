@@ -195,7 +195,7 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
     decodeULEB128(Content.data(), &HeaderSize);
 
     calcRelocations(*File, File->CodeSection->Relocations, Relocations,
-                    BodySize - CodeSectionHeader.size());
+                    BodySize - HeaderSize);
 
     size_t PayloadSize = Content.size() - HeaderSize;
     BodySize += PayloadSize;
