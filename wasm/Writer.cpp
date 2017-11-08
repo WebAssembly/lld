@@ -741,8 +741,8 @@ void Writer::run() {
   if (errorCount())
     return;
 
-  if (auto EC = Buffer->commit())
-    fatal("failed to write the output file: " + EC.message());
+  if (Error E = Buffer->commit())
+    fatal("failed to write the output file: " + toString(std::move(E)));
 }
 
 // Open a result file.
@@ -750,12 +750,13 @@ void Writer::openFile() {
   log("writing: " + Config->OutputFile);
   ::remove(Config->OutputFile.str().c_str());
 
-  ErrorOr<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
+  Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
       FileOutputBuffer::create(Config->OutputFile, FileSize,
                                FileOutputBuffer::F_executable);
 
-  if (auto EC = BufferOrErr.getError())
-    error("failed to open " + Config->OutputFile + ": " + EC.message());
+  if (!BufferOrErr)
+    error("failed to open " + Config->OutputFile + ": " +
+          toString(BufferOrErr.takeError()));
   else
     Buffer = std::move(*BufferOrErr);
 }
