@@ -80,10 +80,6 @@ public:
   explicit ObjectFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
 
-  Symbol *createDefined(const WasmSymbol &Sym,
-                        const InputSegment *Segment = nullptr);
-  Symbol *createUndefined(const WasmSymbol &Sym);
-
   void parse() override;
 
   // Returns the underlying wasm file.
@@ -114,7 +110,11 @@ public:
   std::vector<InputSegment *> Segments;
 
   const std::vector<Symbol *> &getSymbols() { return Symbols; }
+
 private:
+  Symbol *createDefined(const WasmSymbol &Sym,
+                        const InputSegment *Segment = nullptr);
+  Symbol *createUndefined(const WasmSymbol &Sym);
   void initializeSymbols();
   InputSegment* getSegment(const WasmSymbol &WasmSym);
   const Symbol *getFunctionSymbol(uint32_t Index) const;
@@ -122,10 +122,13 @@ private:
 
   // List of all symbols referenced or defined by this file.
   std::vector<Symbol *> Symbols;
+
   // List of all function symbols indexed by the function index space
   std::vector<const Symbol *> FunctionSymbols;
+
   // List of all global symbols indexed by the global index space
   std::vector<const Symbol *> GlobalSymbols;
+
   uint32_t GlobalImports = 0;
   uint32_t FunctionImports = 0;
   std::unique_ptr<WasmObjectFile> WasmObj;

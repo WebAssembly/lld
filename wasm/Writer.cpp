@@ -31,7 +31,7 @@ using namespace llvm::wasm;
 using namespace lld;
 using namespace lld::wasm;
 
-static const int kStackAlignment = 16;
+static constexpr int kStackAlignment = 16;
 
 namespace {
 
@@ -67,7 +67,6 @@ struct WasmSignatureDenseMapInfo {
 // The writer writes a SymbolTable result to a file.
 class Writer {
 public:
-  Writer() = default;
   void run();
 
 private:
@@ -144,7 +143,7 @@ static void debugPrint(const char *fmt, ...) {
 void Writer::createImportSection() {
   uint32_t NumImports = FunctionImports.size() + GlobalImports.size();
   if (Config->ImportMemory)
-    NumImports++;
+    ++NumImports;
 
   if (NumImports == 0)
     return;
@@ -247,7 +246,7 @@ void Writer::createGlobalSection() {
         RelocatedGlobal.InitExpr.Value.Int32 =
             File->getRelocatedAddress(GlobalIndex);
         writeGlobal(OS, RelocatedGlobal);
-        GlobalIndex++;
+        ++GlobalIndex;
       }
     }
   }
@@ -273,10 +272,10 @@ void Writer::createExportSection() {
   uint32_t NumExports = 0;
 
   if (ExportMemory)
-    NumExports += 1;
+    ++NumExports;
 
   if (ExportMain && !ExportOther)
-    NumExports += 1;
+    ++NumExports;
 
   if (ExportOther) {
     for (ObjectFile *File : Symtab->ObjectFiles) {
@@ -285,7 +284,7 @@ void Writer::createExportSection() {
             Sym->WrittenToSymtab)
           continue;
         Sym->WrittenToSymtab = true;
-        NumExports++;
+        ++NumExports;
       }
     }
   }

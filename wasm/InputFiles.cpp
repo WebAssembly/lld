@@ -132,11 +132,12 @@ void ObjectFile::parse() {
   initializeSymbols();
 }
 
+// Return the InputSegment in which a given symbol is defined.
 InputSegment* ObjectFile::getSegment(const WasmSymbol &WasmSym) {
   uint32_t Address = WasmObj->getWasmSymbolValue(WasmSym);
   for (InputSegment* Segment : Segments) {
     if (Address >= Segment->startVA() && Address < Segment->endVA()) {
-      DEBUG(dbgs() << "Found symbol in segmnet: " << WasmSym.Name << " -> "
+      DEBUG(dbgs() << "Found symbol in segment: " << WasmSym.Name << " -> "
                    << Segment->getName() << "\n");
 
       return Segment;
@@ -152,10 +153,10 @@ void ObjectFile::initializeSymbols() {
   for (const WasmImport &Import : WasmObj->imports()) {
     switch (Import.Kind) {
     case WASM_EXTERNAL_FUNCTION:
-      FunctionImports++;
+      ++FunctionImports;
       break;
     case WASM_EXTERNAL_GLOBAL:
-      GlobalImports++;
+      ++GlobalImports;
       break;
     }
   }
@@ -227,12 +228,12 @@ void ArchiveFile::parse() {
   File = check(Archive::create(MB), toString(this));
 
   // Read the symbol table to construct Lazy symbols.
-  int count = 0;
+  int Count = 0;
   for (const Archive::Symbol &Sym : File->symbols()) {
     Symtab->addLazy(this, &Sym);
-    count++;
+    ++Count;
   }
-  DEBUG(dbgs() << "Read " << count << " symbols\n");
+  DEBUG(dbgs() << "Read " << Count << " symbols\n");
 }
 
 void ArchiveFile::addMember(const Archive::Symbol *Sym) {
@@ -241,7 +242,7 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
             "could not get the member for symbol " + Sym->getName());
 
   // Don't try to load the same member twice (this can happen when members
-  // mutually reference each other.
+  // mutually reference each other).
   if (!Seen.insert(C.getChildOffset()).second)
     return;
 

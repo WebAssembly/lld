@@ -6,6 +6,17 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+//
+// Represents a WebAssembly data segment which can be included as part of
+// an output data segments.  Note that in WebAssembly, unlike ELF and other
+// formats, used the term "data segment" to refer to the continous regions of
+// memory that make on the data section. See:
+// https://webassembly.github.io/spec/syntax/modules.html#syntax-data
+//
+// For example, by default, clang will produce a separate data section for
+// each global variable.
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLD_WASM_INPUT_SEGMENT_H
 #define LLD_WASM_INPUT_SEGMENT_H

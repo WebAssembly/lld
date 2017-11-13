@@ -30,7 +30,7 @@ enum class RelocEncoding {
   I32,
 };
 
-static const char *sectionTypeToString(uint32_t SectionType) {
+static StringRef sectionTypeToString(uint32_t SectionType) {
   switch (SectionType) {
   case WASM_SEC_CUSTOM:
     return "CUSTOM";
@@ -58,7 +58,6 @@ static const char *sectionTypeToString(uint32_t SectionType) {
     return "DATA";
   default:
     fatal("invalid section type");
-    return nullptr;
   }
 }
 
