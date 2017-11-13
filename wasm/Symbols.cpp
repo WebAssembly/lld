@@ -18,9 +18,8 @@
 #define DEBUG_TYPE "lld"
 
 using namespace llvm;
-
-namespace lld {
-namespace wasm {
+using namespace lld;
+using namespace lld::wasm;
 
 uint32_t Symbol::getGlobalIndex() const {
   assert(!Sym->isFunction());
@@ -34,7 +33,7 @@ uint32_t Symbol::getFunctionIndex() const {
 
 uint32_t Symbol::getFunctionTypeIndex() const {
   assert(Sym->isFunction());
-  ObjectFile *Obj = cast<ObjectFile>(File);
+  ObjFile *Obj = cast<ObjFile>(File);
   if (Obj->isImportedFunction(Sym->ElementIndex)) {
     const WasmImport &Import = Obj->getWasmObj()->imports()[Sym->ImportIndex];
     DEBUG(dbgs() << "getFunctionTypeIndex: import: " << Sym->ImportIndex
@@ -53,7 +52,7 @@ uint32_t Symbol::getVirtualAddress() const {
     return UINT32_MAX;
 
   assert(Sym != nullptr);
-  ObjectFile *Obj = cast<ObjectFile>(File);
+  ObjFile *Obj = cast<ObjFile>(File);
   const WasmGlobal &Global = Obj->getWasmObj()->globals()[getGlobalIndex() - Obj->NumGlobalImports()];
   assert(Global.Type == llvm::wasm::WASM_TYPE_I32);
   assert(Segment);
@@ -82,14 +81,11 @@ void Symbol::update(Kind K, InputFile *F, const WasmSymbol *WasmSym,
 
 bool Symbol::isWeak() const { return Sym && Sym->isWeak(); }
 
-} // namespace wasm
-
-// Returns a symbol name for an error message.
-std::string toString(wasm::Symbol &Sym) {
+std::string lld::toString(wasm::Symbol &Sym) {
   return wasm::displayName(Sym.getName());
 }
 
-std::string toString(wasm::Symbol::Kind &Kind) {
+std::string lld::toString(wasm::Symbol::Kind &Kind) {
   switch (Kind) {
   case wasm::Symbol::DefinedFunctionKind:
     return "DefinedFunction";
@@ -104,5 +100,3 @@ std::string toString(wasm::Symbol::Kind &Kind) {
   }
   llvm_unreachable("Invalid symbol kind!");
 }
-
-} // namespace lld

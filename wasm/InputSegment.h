@@ -30,12 +30,12 @@ using llvm::wasm::WasmRelocation;
 namespace lld {
 namespace wasm {
 
-class ObjectFile;
+class ObjFile;
 class OutputSegment;
 
 class InputSegment {
 public:
-  InputSegment(const WasmSegment *Seg, const ObjectFile *F)
+  InputSegment(const WasmSegment *Seg, const ObjFile *F)
       : Segment(Seg), File(F) {}
 
   // Translate an offset in the input segment to an offset in the output
@@ -66,7 +66,7 @@ public:
   StringRef getName() const { return Segment->Data.Name; }
 
   const WasmSegment *Segment;
-  const ObjectFile *File;
+  const ObjFile *File;
   std::vector<WasmRelocation> Relocations;
 
 protected:

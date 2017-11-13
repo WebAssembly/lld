@@ -8,16 +8,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Config.h"
+#include "Strings.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Demangle/Demangle.h"
 
 using namespace llvm;
 
-namespace lld {
-namespace wasm {
-
 // Returns the demangled C++ symbol name for Name.
-Optional<std::string> demangle(StringRef Name) {
+Optional<std::string> lld::wasm::demangle(StringRef Name) {
   // itaniumDemangle can be used to demangle strings other than symbol
   // names which do not necessarily start with "_Z". Name can be
   // either a C or C++ symbol. Don't call itaniumDemangle if the name
@@ -34,12 +32,9 @@ Optional<std::string> demangle(StringRef Name) {
   return S;
 }
 
-std::string displayName(StringRef Name) {
+std::string lld::wasm::displayName(StringRef Name) {
   if (Config->Demangle)
     if (Optional<std::string> S = demangle(Name))
       return "`" + *S + "'";
   return Name;
 }
-
-} // namespace wasm
-} // namespace lld

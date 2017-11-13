@@ -19,17 +19,16 @@
 #define DEBUG_TYPE "lld"
 
 using namespace llvm;
+using namespace lld;
+using namespace lld::wasm;
 
-namespace lld {
-namespace wasm {
-
-SymbolTable *Symtab;
+SymbolTable *lld::wasm::Symtab;
 
 void SymbolTable::addFile(InputFile *File) {
   log("Processing: " + toString(File));
   File->parse();
 
-  if (auto *F = dyn_cast<ObjectFile>(File))
+  if (auto *F = dyn_cast<ObjFile>(File))
     ObjectFiles.push_back(F);
 }
 
@@ -46,7 +45,7 @@ void SymbolTable::reportRemainingUndefines() {
   if (Undefs.empty())
     return;
 
-  for (ObjectFile *File : ObjectFiles)
+  for (ObjFile *File : ObjectFiles)
     for (Symbol *Sym : File->getSymbols())
       if (Undefs.count(Sym))
         error(toString(File) + ": undefined symbol: " + toString(*Sym));
@@ -190,6 +189,3 @@ void SymbolTable::addLazy(ArchiveFile *F, const Archive::Symbol *Sym) {
     F->addMember(Sym);
   }
 }
-
-} // namespace wasm
-} // namespace lld

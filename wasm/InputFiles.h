@@ -75,9 +75,9 @@ private:
 };
 
 // .o file (wasm object file)
-class ObjectFile : public InputFile {
+class ObjFile : public InputFile {
 public:
-  explicit ObjectFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
+  explicit ObjFile(MemoryBufferRef M) : InputFile(ObjectKind, M) {}
   static bool classof(const InputFile *F) { return F->kind() == ObjectKind; }
 
   void parse() override;

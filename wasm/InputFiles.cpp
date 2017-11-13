@@ -28,10 +28,7 @@ using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::wasm;
 
-namespace lld {
-namespace wasm {
-
-Optional<MemoryBufferRef> readFile(StringRef Path) {
+Optional<MemoryBufferRef> lld::wasm::readFile(StringRef Path) {
   log("Loading: " + Path);
 
   auto MBOrErr = MemoryBuffer::getFile(Path);
@@ -46,7 +43,7 @@ Optional<MemoryBufferRef> readFile(StringRef Path) {
   return MBRef;
 }
 
-void ObjectFile::dumpInfo() const {
+void ObjFile::dumpInfo() const {
   log("reloc info for: " + getName() + "\n" +
       "        FunctionIndexOffset : " + Twine(FunctionIndexOffset) + "\n" +
       "         NumFunctionImports : " + Twine(NumFunctionImports()) + "\n" +
@@ -55,23 +52,23 @@ void ObjectFile::dumpInfo() const {
       "           NumGlobalImports : " + Twine(NumGlobalImports()) + "\n");
 }
 
-bool ObjectFile::isImportedFunction(uint32_t Index) const {
+bool ObjFile::isImportedFunction(uint32_t Index) const {
   return Index < NumFunctionImports();
 }
 
-const Symbol *ObjectFile::getFunctionSymbol(uint32_t Index) const {
+const Symbol *ObjFile::getFunctionSymbol(uint32_t Index) const {
   return FunctionSymbols[Index];
 }
 
-const Symbol *ObjectFile::getGlobalSymbol(uint32_t Index) const {
+const Symbol *ObjFile::getGlobalSymbol(uint32_t Index) const {
   return GlobalSymbols[Index];
 }
 
-uint32_t ObjectFile::getRelocatedAddress(uint32_t Index) const {
+uint32_t ObjFile::getRelocatedAddress(uint32_t Index) const {
   return getGlobalSymbol(Index)->getVirtualAddress();
 }
 
-uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) const {
+uint32_t ObjFile::relocateFunctionIndex(uint32_t Original) const {
   DEBUG(dbgs() << "relocateFunctionIndex: " << Original);
   const Symbol* Sym = getFunctionSymbol(Original);
   uint32_t Index;
@@ -84,15 +81,15 @@ uint32_t ObjectFile::relocateFunctionIndex(uint32_t Original) const {
   return Index;
 }
 
-uint32_t ObjectFile::relocateTypeIndex(uint32_t Original) const {
+uint32_t ObjFile::relocateTypeIndex(uint32_t Original) const {
   return TypeMap[Original];
 }
 
-uint32_t ObjectFile::relocateTableIndex(uint32_t Original) const {
+uint32_t ObjFile::relocateTableIndex(uint32_t Original) const {
   return Original + TableIndexOffset;
 }
 
-uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) const {
+uint32_t ObjFile::relocateGlobalIndex(uint32_t Original) const {
   DEBUG(dbgs() << "relocateGlobalIndex: " << Original);
   uint32_t Index;
   const Symbol *Sym = getGlobalSymbol(Original);
@@ -105,7 +102,7 @@ uint32_t ObjectFile::relocateGlobalIndex(uint32_t Original) const {
   return Index;
 }
 
-void ObjectFile::parse() {
+void ObjFile::parse() {
   // Parse a memory buffer as a wasm file.
   DEBUG(dbgs() << "Parsing object: " << toString(this) << "\n");
   std::unique_ptr<Binary> Bin = check(createBinary(MB), toString(this));
@@ -133,7 +130,7 @@ void ObjectFile::parse() {
 }
 
 // Return the InputSegment in which a given symbol is defined.
-InputSegment* ObjectFile::getSegment(const WasmSymbol &WasmSym) {
+InputSegment* ObjFile::getSegment(const WasmSymbol &WasmSym) {
   uint32_t Address = WasmObj->getWasmSymbolValue(WasmSym);
   for (InputSegment* Segment : Segments) {
     if (Address >= Segment->startVA() && Address < Segment->endVA()) {
@@ -147,7 +144,7 @@ InputSegment* ObjectFile::getSegment(const WasmSymbol &WasmSym) {
   return nullptr;
 }
 
-void ObjectFile::initializeSymbols() {
+void ObjFile::initializeSymbols() {
   Symbols.reserve(WasmObj->getNumberOfSymbols());
 
   for (const WasmImport &Import : WasmObj->imports()) {
@@ -200,11 +197,11 @@ void ObjectFile::initializeSymbols() {
   DEBUG(dbgs() << "Globals  : " << GlobalSymbols.size() << "\n");
 }
 
-Symbol *ObjectFile::createUndefined(const WasmSymbol &Sym) {
+Symbol *ObjFile::createUndefined(const WasmSymbol &Sym) {
   return Symtab->addUndefined(this, &Sym);
 }
 
-Symbol *ObjectFile::createDefined(const WasmSymbol &Sym,
+Symbol *ObjFile::createDefined(const WasmSymbol &Sym,
                                   const InputSegment *Segment) {
   Symbol* S;
   if (Sym.isLocal()) {
@@ -259,13 +256,10 @@ void ArchiveFile::addMember(const Archive::Symbol *Sym) {
     return;
   }
 
-  InputFile *Obj = make<ObjectFile>(MB);
+  InputFile *Obj = make<ObjFile>(MB);
   Obj->ParentName = ParentName;
   Symtab->addFile(Obj);
 }
-
-} // namespace wasm
-} // namespace lld
 
 // Returns a string in the format of "foo.o" or "foo.a(bar.o)".
 std::string lld::toString(wasm::InputFile *File) {

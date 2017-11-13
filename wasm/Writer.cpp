@@ -158,7 +158,7 @@ void Writer::createImportSection() {
     Import.Module = "env";
     Import.Field = Sym->getName();
     Import.Kind = WASM_EXTERNAL_FUNCTION;
-    ObjectFile *Obj = cast<ObjectFile>(Sym->getFile());
+    auto *Obj = cast<ObjFile>(Sym->getFile());
     Import.SigIndex = Obj->relocateTypeIndex(Sym->getFunctionTypeIndex());
     writeImport(OS, Import);
   }
@@ -179,9 +179,9 @@ void Writer::createImportSection() {
     Import.Field = Sym->getName();
     Import.Kind = WASM_EXTERNAL_GLOBAL;
     Import.Global.Mutable = false;
-    assert(isa<ObjectFile>(Sym->getFile()));
+    assert(isa<ObjFile>(Sym->getFile()));
     // TODO(sbc): Set type of this import
-    // ObjectFile* Obj = dyn_cast<ObjectFile>(Sym->getFile());
+    // ObjFile* Obj = dyn_cast<ObjFile>(Sym->getFile());
     Import.Global.Type = WASM_TYPE_I32; // Sym->getGlobalType();
     writeImport(OS, Import);
   }
@@ -204,7 +204,7 @@ void Writer::createFunctionSection() {
   raw_ostream &OS = Section->getStream();
 
   writeUleb128(OS, NumFunctions, "function count");
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     for (uint32_t Sig : File->getWasmObj()->functionTypes()) {
       writeUleb128(OS, File->relocateTypeIndex(Sig), "sig index");
     }
@@ -234,7 +234,7 @@ void Writer::createGlobalSection() {
   }
 
   if (Config->Relocatable || Config->EmitRelocs) {
-    for (ObjectFile *File : Symtab->ObjectFiles) {
+    for (ObjFile *File : Symtab->ObjectFiles) {
       uint32_t GlobalIndex = File->NumGlobalImports();
       for (const WasmGlobal &Global : File->getWasmObj()->globals()) {
         WasmGlobal RelocatedGlobal(Global);
@@ -278,7 +278,7 @@ void Writer::createExportSection() {
     ++NumExports;
 
   if (ExportOther) {
-    for (ObjectFile *File : Symtab->ObjectFiles) {
+    for (ObjFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
         if (!Sym->isFunction() || Sym->isLocal() || Sym->isUndefined() ||
             Sym->WrittenToSymtab)
@@ -322,7 +322,7 @@ void Writer::createExportSection() {
   }
 
   if (ExportOther) {
-    for (ObjectFile *File : Symtab->ObjectFiles) {
+    for (ObjFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
         if (!Sym->isFunction() || Sym->isLocal() | Sym->isUndefined() ||
             !Sym->WrittenToSymtab)
@@ -362,7 +362,7 @@ void Writer::createElemSection() {
   writeInitExpr(OS, InitExpr);
   writeUleb128(OS, NumElements, "elem count");
 
-  for (ObjectFile *File : Symtab->ObjectFiles)
+  for (ObjFile *File : Symtab->ObjectFiles)
     for (const WasmElemSegment &Segment : File->getWasmObj()->elements())
       for (uint64_t FunctionIndex : Segment.Functions)
         writeUleb128(OS, File->relocateFunctionIndex(FunctionIndex),
@@ -440,7 +440,7 @@ void Writer::createNameSection() {
   // Create an array of all function sorted by function index space
   std::vector<const Symbol *> Names;
 
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     Names.reserve(Names.size() + File->getSymbols().size());
     for (Symbol *S : File->getSymbols()) {
       if (!S->isFunction() || S->isWeak() || S->WrittenToNameSec)
@@ -561,7 +561,7 @@ void Writer::calculateOffsets() {
   NumGlobals = Config->SyntheticGlobals.size();
   NumTableElems = InitialTableOffset;
 
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     const WasmObjectFile *WasmFile = File->getWasmObj();
 
     // Function Index
@@ -611,7 +611,7 @@ void Writer::calculateOffsets() {
 }
 
 void Writer::calculateImports() {
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     for (Symbol *Sym : File->getSymbols()) {
       if (Sym->hasOutputIndex() || Sym->isDefined() || Sym->isWeak())
         continue;
@@ -628,7 +628,7 @@ void Writer::calculateImports() {
 }
 
 void Writer::calculateTypes() {
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     File->TypeMap.reserve(File->getWasmObj()->types().size());
     for (const WasmSignature &Sig : File->getWasmObj()->types()) {
       auto Pair = TypeIndices.insert(std::make_pair(Sig, Types.size()));
@@ -642,14 +642,14 @@ void Writer::calculateTypes() {
 }
 
 void Writer::assignSymbolIndexes() {
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     DEBUG(dbgs() << "assignSymbolIndexes: " << File->getName() << "\n");
     for (Symbol *Sym : File->getSymbols()) {
       if (Sym->hasOutputIndex() || !Sym->isDefined())
         continue;
 
-      if (Sym->getFile() && isa<ObjectFile>(Sym->getFile())) {
-        ObjectFile *Obj = cast<ObjectFile>(Sym->getFile());
+      if (Sym->getFile() && isa<ObjFile>(Sym->getFile())) {
+        auto *Obj = cast<ObjFile>(Sym->getFile());
         if (Sym->isFunction())
           Sym->setOutputIndex(Obj->FunctionIndexOffset + Sym->getFunctionIndex());
         else
@@ -676,7 +676,7 @@ static StringRef getOutputDataSegmentName(StringRef Name) {
 }
 
 void Writer::createOutputSegments() {
-  for (ObjectFile *File : Symtab->ObjectFiles) {
+  for (ObjFile *File : Symtab->ObjectFiles) {
     for (InputSegment *Segment : File->Segments) {
       StringRef Name = getOutputDataSegmentName(Segment->getName());
       OutputSegment*& S = SegmentMap[Name];
@@ -715,7 +715,7 @@ void Writer::run() {
         Twine(FunctionImports.size() + GlobalImports.size()));
     log("FunctionImports : " + Twine(FunctionImports.size()));
     log("GlobalImports   : " + Twine(GlobalImports.size()));
-    for (ObjectFile *File : Symtab->ObjectFiles)
+    for (ObjFile *File : Symtab->ObjectFiles)
       File->dumpInfo();
   }
 
@@ -768,10 +768,4 @@ void Writer::createHeader() {
   FileSize += Header.size();
 }
 
-namespace lld {
-namespace wasm {
-
-void writeResult() { Writer().run(); }
-
-} // namespace wasm
-} // namespace lld
+void lld::wasm::writeResult() { Writer().run(); }

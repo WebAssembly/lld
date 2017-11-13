@@ -111,7 +111,7 @@ static void applyRelocations(uint8_t *Buf,
 // space of the input file.  This function takes a relocation and returns the
 // relocated index (i.e. translates from the input index space to the output
 // index space).
-static uint32_t calcNewIndex(const ObjectFile &File,
+static uint32_t calcNewIndex(const ObjFile &File,
                              const WasmRelocation &Reloc) {
   switch (Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
@@ -134,7 +134,7 @@ static uint32_t calcNewIndex(const ObjectFile &File,
 // Take a vector of relocations from an input file and create output
 // relocations based on them. Calculates the updated index and offset for
 // each relocation as well as the value to write out in the final binary.
-static void calcRelocations(const ObjectFile &File,
+static void calcRelocations(const ObjFile &File,
                             ArrayRef<WasmRelocation> Relocs,
                             std::vector<OutputRelocation> &OutputRelocs,
                             int32_t OutputOffset) {
@@ -176,7 +176,7 @@ void OutputSection::createHeader(size_t BodySize) {
       " total=" + Twine(getSize()));
 }
 
-CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
+CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjFile *> &Objs)
     : OutputSection(WASM_SEC_CODE), InputObjects(Objs) {
   raw_string_ostream OS(CodeSectionHeader);
   writeUleb128(OS, NumFunctions, "function count");
@@ -184,7 +184,7 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjectFile *> &Objs)
   BodySize = CodeSectionHeader.size();
 
   uint32_t NumRelocations = 0;
-  for (ObjectFile *File : InputObjects) {
+  for (ObjFile *File : InputObjects) {
     if (!File->CodeSection)
       continue;
 
@@ -221,7 +221,7 @@ void CodeSection::writeTo(uint8_t *Buf) {
   Buf += CodeSectionHeader.size();
 
   // Write code section body
-  for (ObjectFile *File : InputObjects) {
+  for (ObjFile *File : InputObjects) {
     if (!File->CodeSection)
       continue;
 

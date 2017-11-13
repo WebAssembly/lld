@@ -30,8 +30,7 @@ using llvm::sys::Process;
 using namespace lld;
 using namespace lld::wasm;
 
-namespace lld {
-namespace wasm {
+namespace {
 
 // Parses command line options.
 class WasmOptTable : public llvm::opt::OptTable {
@@ -59,13 +58,12 @@ private:
   std::vector<InputFile *> Files;
 };
 
-std::vector<SpecificAllocBase *> SpecificAllocBase::Instances;
-Configuration *Config;
 LinkerDriver *Driver;
 
-} // namespace wasm
-} // namespace lld
+} // anonymous namespace
 
+std::vector<SpecificAllocBase *> lld::wasm::SpecificAllocBase::Instances;
+Configuration *lld::wasm::Config;
 BumpPtrAllocator lld::wasm::BAlloc;
 
 bool lld::wasm::link(ArrayRef<const char *> Args, bool CanExitEarly,
@@ -240,7 +238,7 @@ void LinkerDriver::addFile(StringRef Path) {
   if (identify_magic(MBRef.getBuffer()) == file_magic::archive)
     Files.push_back(make<ArchiveFile>(MBRef));
   else
-    Files.push_back(make<ObjectFile>(MBRef));
+    Files.push_back(make<ObjFile>(MBRef));
 }
 
 // Add a given library by searching it from input search paths.
