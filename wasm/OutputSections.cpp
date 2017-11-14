@@ -15,6 +15,7 @@
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/Threads.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/LEB128.h"
 
@@ -195,6 +196,7 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjFile *> &Objs)
     if (!File->CodeSection)
       continue;
 
+    File->CodeOffset = BodySize;
     ArrayRef<uint8_t> Content = File->CodeSection->Content;
     unsigned HeaderSize = 0;
     decodeULEB128(Content.data(), &HeaderSize);
@@ -224,10 +226,10 @@ void CodeSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, CodeSectionHeader.data(), CodeSectionHeader.size());
   Buf += CodeSectionHeader.size();
 
-  // Write code section body
-  for (ObjFile *File : InputObjects) {
+  // Write code section bodies
+  parallelForEach(InputObjects, [ContentsStart](ObjFile *File) {
     if (!File->CodeSection)
-      continue;
+      return;
 
     ArrayRef<uint8_t> Content(File->CodeSection->Content);
 
@@ -236,14 +238,12 @@ void CodeSection::writeTo(uint8_t *Buf) {
     decodeULEB128(Content.data(), &HeaderSize);
 
     size_t PayloadSize = Content.size() - HeaderSize;
-    memcpy(Buf, Content.data() + HeaderSize, PayloadSize);
+    memcpy(ContentsStart + File->CodeOffset, Content.data() + HeaderSize, PayloadSize);
 
     log("applying relocations for: " + File->getName());
     if (File->CodeRelocations.size())
       applyRelocations(ContentsStart, File->CodeRelocations);
-
-    Buf += PayloadSize;
-  }
+  });
 
 }
 

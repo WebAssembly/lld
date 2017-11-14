@@ -107,6 +107,7 @@ public:
   int32_t TableIndexOffset = 0;
   const WasmSection *CodeSection = nullptr;
   std::vector<OutputRelocation> CodeRelocations;
+  int32_t CodeOffset = 0;
   const WasmSection *DataSection = nullptr;
 
   std::vector<uint32_t> TypeMap;
