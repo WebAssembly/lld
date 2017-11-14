@@ -391,7 +391,11 @@ void Writer::createDataSection() {
 // Create reloctions sections in the final output.
 // These are only created when relocatable output is requested.
 void Writer::createRelocSections() {
-  for (OutputSection *S : OutputSections) {
+  log("createRelocSections");
+  // Don't use iterator here since we are adding to OutputSection
+  size_t OrigSize = OutputSections.size();
+  for (size_t i = 0; i < OrigSize; i++) {
+    OutputSection *S = OutputSections[i];
     if (S->Relocations.empty())
       continue;
     const char *name;

@@ -193,6 +193,9 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjFile *> &Objs)
     unsigned HeaderSize = 0;
     decodeULEB128(Content.data(), &HeaderSize);
 
+    log("HeaderSize: " + Twine(HeaderSize));
+    log("CodeSectionHeader.size(): " + Twine(CodeSectionHeader.size()));
+
     calcRelocations(*File, File->CodeSection->Relocations, Relocations,
                     BodySize - HeaderSize);
 
