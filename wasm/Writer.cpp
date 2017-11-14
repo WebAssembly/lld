@@ -396,21 +396,23 @@ void Writer::createRelocSections() {
   size_t OrigSize = OutputSections.size();
   for (size_t i = 0; i < OrigSize; i++) {
     OutputSection *S = OutputSections[i];
-    if (S->Relocations.empty())
-      continue;
     const char *name;
-    if (S->Type == WASM_SEC_DATA) {
+    uint32_t Count = S->numRelocations();
+    if (!Count)
+      continue;
+
+    if (S->Type == WASM_SEC_DATA)
       name = "reloc.DATA";
-    } else {
-      assert(S->Type == WASM_SEC_CODE);
+    else if (S->Type == WASM_SEC_CODE)
       name = "reloc.CODE";
-    }
+    else
+      llvm_unreachable("relocations only support for code and data");
+
     SyntheticSection *Section = createSyntheticSection(WASM_SEC_CUSTOM, name);
     raw_ostream &OS = Section->getStream();
     writeUleb128(OS, S->Type, "reloc section");
-    writeUleb128(OS, S->Relocations.size(), "reloc section");
-    for (const OutputRelocation &Reloc : S->Relocations)
-      writeReloc(OS, Reloc);
+    writeUleb128(OS, Count, "reloc count");
+    S->writeRelocations(OS);
   }
 }
 

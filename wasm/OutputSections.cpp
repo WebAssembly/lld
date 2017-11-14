@@ -73,17 +73,27 @@ static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
                << " index=" << Reloc.Reloc.Index << " new=" << Reloc.NewIndex
                << " value=" << Reloc.Value << " offset=" << Reloc.Reloc.Offset
                << "\n");
+  Buf += Reloc.Reloc.Offset;
+  int64_t ExistingValue;
   switch (Reloc.Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
   case R_WEBASSEMBLY_FUNCTION_INDEX_LEB:
-    assert(decodeULEB128(Buf) == Reloc.Reloc.Index);
+    ExistingValue = decodeULEB128(Buf);
+    if (ExistingValue != Reloc.Reloc.Index) {
+      DEBUG(dbgs() << "existing value: " << decodeULEB128(Buf) << "\n");
+      assert(decodeULEB128(Buf) == Reloc.Reloc.Index);
+    }
     LLVM_FALLTHROUGH;
   case R_WEBASSEMBLY_MEMORY_ADDR_LEB:
   case R_WEBASSEMBLY_GLOBAL_INDEX_LEB:
     encodeULEB128(Reloc.Value, Buf, 5);
     break;
   case R_WEBASSEMBLY_TABLE_INDEX_SLEB:
-    assert(decodeSLEB128(Buf) == Reloc.Reloc.Index);
+    ExistingValue = decodeSLEB128(Buf);
+    if (ExistingValue != Reloc.Reloc.Index) {
+      DEBUG(dbgs() << "existing value: " << decodeSLEB128(Buf) << "\n");
+      assert(decodeSLEB128(Buf) == Reloc.Reloc.Index);
+    }
     LLVM_FALLTHROUGH;
   case R_WEBASSEMBLY_MEMORY_ADDR_SLEB:
     encodeSLEB128(static_cast<int32_t>(Reloc.Value), Buf, 5);
@@ -98,12 +108,10 @@ static void applyRelocation(uint8_t *Buf, const OutputRelocation &Reloc) {
 }
 
 static void applyRelocations(uint8_t *Buf,
-                             const std::vector<OutputRelocation> &Relocs,
-                             uint32_t Offset) {
-  log("applyRelocations: offset=" + Twine(Offset) +
-      " count=" + Twine(Relocs.size()));
+                             const std::vector<OutputRelocation> &Relocs) {
+  log("applyRelocations: count=" + Twine(Relocs.size()));
   for (const OutputRelocation &Reloc : Relocs) {
-    applyRelocation(Buf + Reloc.Reloc.Offset - Offset, Reloc);
+    applyRelocation(Buf, Reloc);
   }
 }
 
@@ -183,27 +191,20 @@ CodeSection::CodeSection(uint32_t NumFunctions, std::vector<ObjFile *> &Objs)
   OS.flush();
   BodySize = CodeSectionHeader.size();
 
-  uint32_t NumRelocations = 0;
   for (ObjFile *File : InputObjects) {
     if (!File->CodeSection)
       continue;
 
-    NumRelocations += File->CodeSection->Relocations.size();
     ArrayRef<uint8_t> Content = File->CodeSection->Content;
     unsigned HeaderSize = 0;
     decodeULEB128(Content.data(), &HeaderSize);
 
-    log("HeaderSize: " + Twine(HeaderSize));
-    log("CodeSectionHeader.size(): " + Twine(CodeSectionHeader.size()));
-
-    calcRelocations(*File, File->CodeSection->Relocations, Relocations,
-                    BodySize - HeaderSize);
+    calcRelocations(*File, File->CodeSection->Relocations,
+                    File->CodeRelocations, BodySize - HeaderSize);
 
     size_t PayloadSize = Content.size() - HeaderSize;
     BodySize += PayloadSize;
   }
-  assert(Relocations.size() == NumRelocations);
-  log("NumRelocations: " + Twine(NumRelocations));
 
   createHeader(BodySize);
 }
@@ -237,10 +238,26 @@ void CodeSection::writeTo(uint8_t *Buf) {
     size_t PayloadSize = Content.size() - HeaderSize;
     memcpy(Buf, Content.data() + HeaderSize, PayloadSize);
 
+    log("applying relocations for: " + File->getName());
+    if (File->CodeRelocations.size())
+      applyRelocations(ContentsStart, File->CodeRelocations);
+
     Buf += PayloadSize;
   }
 
-  applyRelocations(ContentsStart, Relocations, 0);
+}
+
+uint32_t CodeSection::numRelocations() const {
+  uint32_t Count = 0;
+  for (ObjFile *File : InputObjects)
+    Count += File->CodeRelocations.size();
+  return Count;
+}
+
+void CodeSection::writeRelocations(raw_ostream &OS) const {
+  for (ObjFile *File : InputObjects)
+    for (const OutputRelocation &Reloc : File->CodeRelocations)
+      writeReloc(OS, Reloc);
 }
 
 DataSection::DataSection(std::vector<OutputSegment *> &Segments)
@@ -266,8 +283,6 @@ DataSection::DataSection(std::vector<OutputSegment *> &Segments)
       uint32_t InputOffset = InputSeg->getInputSectionOffset();
       uint32_t OutputOffset =
           Segment->getSectionOffset() + InputSeg->getOutputSegmentOffset();
-      log("Reloc inputOffset=" + Twine(InputOffset) +
-          " outputOffset=" + Twine(OutputOffset));
       calcRelocations(*InputSeg->File, InputSeg->Relocations, Relocations,
                       OutputOffset - InputOffset);
     }
@@ -307,5 +322,10 @@ void DataSection::writeTo(uint8_t *Buf) {
     Buf += Segment->Size;
   }
 
-  applyRelocations(ContentsStart, Relocations, 0);
+  applyRelocations(ContentsStart, Relocations);
+}
+
+void DataSection::writeRelocations(raw_ostream &OS) const {
+  for (const OutputRelocation &Reloc : Relocations)
+    writeReloc(OS, Reloc);
 }

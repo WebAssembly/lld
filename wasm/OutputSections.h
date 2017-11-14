@@ -45,7 +45,10 @@ public:
   std::string Header;
   uint32_t Type;
   std::string Name;
-  std::vector<OutputRelocation> Relocations;
+
+
+  virtual uint32_t numRelocations() const { return 0; }
+  virtual void writeRelocations(raw_ostream &OS) const {}
 
 protected:
   size_t Offset = 0;
@@ -101,6 +104,8 @@ public:
   explicit CodeSection(uint32_t NumFunctions, std::vector<ObjFile *> &Objs);
   size_t getSize() const override { return Header.size() + BodySize; }
   void writeTo(uint8_t *Buf) override;
+  uint32_t numRelocations() const override;
+  void writeRelocations(raw_ostream &OS) const override;
 
 protected:
   std::vector<ObjFile *> &InputObjects;
@@ -113,8 +118,11 @@ public:
   explicit DataSection(std::vector<OutputSegment *> &Segments);
   size_t getSize() const override { return Header.size() + BodySize; }
   void writeTo(uint8_t *Buf) override;
+  uint32_t numRelocations() const override { return Relocations.size(); }
+  void writeRelocations(raw_ostream &OS) const override;
 
 protected:
+  std::vector<OutputRelocation> Relocations;
   std::vector<OutputSegment  *> &Segments;
   std::string DataSectionHeader;
   size_t BodySize = 0;

@@ -17,6 +17,8 @@
 #include "llvm/Object/Wasm.h"
 #include "llvm/Support/MemoryBuffer.h"
 
+#include "WriterUtils.h"
+
 #include <vector>
 
 using llvm::object::WasmObjectFile;
@@ -104,6 +106,7 @@ public:
   int32_t GlobalIndexOffset = 0;
   int32_t TableIndexOffset = 0;
   const WasmSection *CodeSection = nullptr;
+  std::vector<OutputRelocation> CodeRelocations;
   const WasmSection *DataSection = nullptr;
 
   std::vector<uint32_t> TypeMap;
