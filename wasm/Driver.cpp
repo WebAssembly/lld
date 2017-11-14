@@ -177,11 +177,11 @@ static void handleColorDiagnostics(opt::InputArgList &Args) {
 }
 
 // Find a file by concatenating given paths.
-static Optional<StringRef> findFile(StringRef Path1, const Twine &Path2) {
+static Optional<std::string> findFile(StringRef Path1, const Twine &Path2) {
   SmallString<128> S;
   path::append(S, Path1, Path2);
   if (fs::exists(S))
-    return S.str();
+    return S.str().str();
   return None;
 }
 
@@ -244,7 +244,7 @@ void LinkerDriver::addFile(StringRef Path) {
 // Add a given library by searching it from input search paths.
 void LinkerDriver::addLibrary(StringRef Name) {
   for (StringRef Dir : Config->SearchPaths) {
-    if (Optional<StringRef> S = findFile(Dir, "lib" + Name + ".a")) {
+    if (Optional<std::string> S = findFile(Dir, "lib" + Name + ".a")) {
       addFile(*S);
       return;
     }
