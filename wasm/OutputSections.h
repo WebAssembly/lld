@@ -15,6 +15,9 @@
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/DenseMap.h"
 
+using llvm::raw_ostream;
+using llvm::raw_string_ostream;
+
 namespace lld {
 
 namespace wasm {
