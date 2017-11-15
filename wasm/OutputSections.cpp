@@ -276,13 +276,13 @@ DataSection::DataSection(std::vector<OutputSegment *> &Segments)
     writeUleb128(OS, WASM_OPCODE_END, "opcode:end");
     writeUleb128(OS, Segment->Size, "segment size");
     OS.flush();
-    BodySize += Segment->Header.size();
     Segment->setSectionOffset(BodySize);
+    BodySize += Segment->Header.size();
     log("Data segment: size=" + Twine(Segment->Size));
     for (const InputSegment* InputSeg : Segment->InputSegments) {
       uint32_t InputOffset = InputSeg->getInputSectionOffset();
       uint32_t OutputOffset =
-          Segment->getSectionOffset() + InputSeg->getOutputSegmentOffset();
+          Segment->getSectionOffset() + Segment->Header.size() + InputSeg->getOutputSegmentOffset();
       calcRelocations(*InputSeg->File, InputSeg->Relocations, Relocations,
                       OutputOffset - InputOffset);
     }
@@ -305,22 +305,19 @@ void DataSection::writeTo(uint8_t *Buf) {
 
   // Write data section headers
   memcpy(Buf, DataSectionHeader.data(), DataSectionHeader.size());
-  Buf += DataSectionHeader.size();
 
-  for (const OutputSegment *Segment : Segments) {
+  parallelForEach(Segments, [ContentsStart](const OutputSegment *Segment) {
     // Write data segment header
-    memcpy(Buf, Segment->Header.data(), Segment->Header.size());
-    Buf += Segment->Header.size();
-    uint8_t* Start = Buf;
+    uint8_t *SegStart = ContentsStart + Segment->getSectionOffset();
+    memcpy(SegStart, Segment->Header.data(), Segment->Header.size());
 
     // Write segment data payload
     for (const InputSegment *Input : Segment->InputSegments) {
       ArrayRef<uint8_t> Content(Input->Segment->Data.Content);
-      memcpy(Start + Input->getOutputSegmentOffset(), Content.data(),
+      memcpy(SegStart + Segment->Header.size() + Input->getOutputSegmentOffset(), Content.data(),
              Content.size());
     }
-    Buf += Segment->Size;
-  }
+  });
 
   applyRelocations(ContentsStart, Relocations);
 }

@@ -41,7 +41,6 @@ public:
   StringRef Name;
   uint32_t Alignment = 0;
   uint32_t StartVA = 0;
-  uint32_t SectionOffset = 0;
   std::vector<const InputSegment*> InputSegments;
 
   // Sum of the size of the all the input segments
@@ -49,6 +48,9 @@ public:
 
   // Segment header
   std::string Header;
+
+private:
+  uint32_t SectionOffset = 0;
 };
 
 } // namespace wasm
