@@ -42,19 +42,13 @@ public:
   // segment.
   uint32_t translateVA(uint32_t Address) const;
 
-  const OutputSegment *getOutputSegment() const {
-    return OutputSeg;
-  }
+  const OutputSegment *getOutputSegment() const { return OutputSeg; }
 
-  uint32_t getOutputSegmentOffset() const {
-    return OutputSegmentOffset;
-  }
+  uint32_t getOutputSegmentOffset() const { return OutputSegmentOffset; }
 
-  uint32_t getInputSectionOffset() const {
-    return Segment->SectionOffset;
-  }
+  uint32_t getInputSectionOffset() const { return Segment->SectionOffset; }
 
-  void setOutputSegment(const OutputSegment* Segment, uint32_t Offset) {
+  void setOutputSegment(const OutputSegment *Segment, uint32_t Offset) {
     OutputSeg = Segment;
     OutputSegmentOffset = Offset;
   }

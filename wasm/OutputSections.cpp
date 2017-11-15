@@ -120,8 +120,7 @@ static void applyRelocations(uint8_t *Buf,
 // space of the input file.  This function takes a relocation and returns the
 // relocated index (i.e. translates from the input index space to the output
 // index space).
-static uint32_t calcNewIndex(const ObjFile &File,
-                             const WasmRelocation &Reloc) {
+static uint32_t calcNewIndex(const ObjFile &File, const WasmRelocation &Reloc) {
   switch (Reloc.Type) {
   case R_WEBASSEMBLY_TYPE_INDEX_LEB:
     return File.relocateTypeIndex(Reloc.Index);
@@ -238,13 +237,13 @@ void CodeSection::writeTo(uint8_t *Buf) {
     decodeULEB128(Content.data(), &HeaderSize);
 
     size_t PayloadSize = Content.size() - HeaderSize;
-    memcpy(ContentsStart + File->CodeOffset, Content.data() + HeaderSize, PayloadSize);
+    memcpy(ContentsStart + File->CodeOffset, Content.data() + HeaderSize,
+           PayloadSize);
 
     log("applying relocations for: " + File->getName());
     if (File->CodeRelocations.size())
       applyRelocations(ContentsStart, File->CodeRelocations);
   });
-
 }
 
 uint32_t CodeSection::numRelocations() const {
@@ -279,10 +278,11 @@ DataSection::DataSection(std::vector<OutputSegment *> &Segments)
     Segment->setSectionOffset(BodySize);
     BodySize += Segment->Header.size();
     log("Data segment: size=" + Twine(Segment->Size));
-    for (const InputSegment* InputSeg : Segment->InputSegments) {
+    for (const InputSegment *InputSeg : Segment->InputSegments) {
       uint32_t InputOffset = InputSeg->getInputSectionOffset();
-      uint32_t OutputOffset =
-          Segment->getSectionOffset() + Segment->Header.size() + InputSeg->getOutputSegmentOffset();
+      uint32_t OutputOffset = Segment->getSectionOffset() +
+                              Segment->Header.size() +
+                              InputSeg->getOutputSegmentOffset();
       calcRelocations(*InputSeg->File, InputSeg->Relocations, Relocations,
                       OutputOffset - InputOffset);
     }
@@ -314,8 +314,9 @@ void DataSection::writeTo(uint8_t *Buf) {
     // Write segment data payload
     for (const InputSegment *Input : Segment->InputSegments) {
       ArrayRef<uint8_t> Content(Input->Segment->Data.Content);
-      memcpy(SegStart + Segment->Header.size() + Input->getOutputSegmentOffset(), Content.data(),
-             Content.size());
+      memcpy(SegStart + Segment->Header.size() +
+                 Input->getOutputSegmentOffset(),
+             Content.data(), Content.size());
     }
   });
 

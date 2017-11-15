@@ -120,7 +120,7 @@ private:
                         const InputSegment *Segment = nullptr);
   Symbol *createUndefined(const WasmSymbol &Sym);
   void initializeSymbols();
-  InputSegment* getSegment(const WasmSymbol &WasmSym);
+  InputSegment *getSegment(const WasmSymbol &WasmSym);
   const Symbol *getFunctionSymbol(uint32_t Index) const;
   const Symbol *getGlobalSymbol(uint32_t Index) const;
 

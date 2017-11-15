@@ -54,7 +54,7 @@ void wasm::writeSleb128(raw_ostream &OS, int32_t Number, const char *msg) {
 }
 
 void wasm::writeBytes(raw_ostream &OS, const char *bytes, size_t count,
-                const char *msg) {
+                      const char *msg) {
   if (msg)
     debugWrite(OS.tell(), msg + formatv(" [data[{0}]]", count));
   OS.write(bytes, count);
@@ -68,7 +68,9 @@ void wasm::writeStr(raw_ostream &OS, const StringRef String, const char *msg) {
   writeBytes(OS, String.data(), String.size());
 }
 
-void wasm::writeU8(raw_ostream &OS, uint8_t byte, const char *msg) { OS << byte; }
+void wasm::writeU8(raw_ostream &OS, uint8_t byte, const char *msg) {
+  OS << byte;
+}
 
 void wasm::writeU32(raw_ostream &OS, uint32_t Number, const char *msg) {
   debugWrite(OS.tell(), msg + formatv("[{0:x}]", Number));

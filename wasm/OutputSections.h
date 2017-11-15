@@ -17,7 +17,9 @@
 
 namespace lld {
 
-namespace wasm { class OutputSection; }
+namespace wasm {
+class OutputSection;
+}
 std::string toString(wasm::OutputSection *Section);
 
 namespace wasm {
@@ -45,7 +47,6 @@ public:
   std::string Header;
   uint32_t Type;
   std::string Name;
-
 
   virtual uint32_t numRelocations() const { return 0; }
   virtual void writeRelocations(raw_ostream &OS) const {}
@@ -123,7 +124,7 @@ public:
 
 protected:
   std::vector<OutputRelocation> Relocations;
-  std::vector<OutputSegment  *> &Segments;
+  std::vector<OutputSegment *> &Segments;
   std::string DataSectionHeader;
   size_t BodySize = 0;
 };

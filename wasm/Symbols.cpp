@@ -40,7 +40,8 @@ uint32_t Symbol::getFunctionTypeIndex() const {
                  << " -> " << Import.SigIndex << "\n");
     return Import.SigIndex;
   }
-  DEBUG(dbgs() << "getFunctionTypeIndex: non import: " << Sym->ElementIndex << "\n");
+  DEBUG(dbgs() << "getFunctionTypeIndex: non import: " << Sym->ElementIndex
+               << "\n");
   uint32_t FuntionIndex = Sym->ElementIndex - Obj->NumFunctionImports();
   return Obj->getWasmObj()->functionTypes()[FuntionIndex];
 }
@@ -53,7 +54,8 @@ uint32_t Symbol::getVirtualAddress() const {
 
   assert(Sym != nullptr);
   ObjFile *Obj = cast<ObjFile>(File);
-  const WasmGlobal &Global = Obj->getWasmObj()->globals()[getGlobalIndex() - Obj->NumGlobalImports()];
+  const WasmGlobal &Global =
+      Obj->getWasmObj()->globals()[getGlobalIndex() - Obj->NumGlobalImports()];
   assert(Global.Type == llvm::wasm::WASM_TYPE_I32);
   assert(Segment);
   return Segment->translateVA(Global.InitExpr.Value.Int32);

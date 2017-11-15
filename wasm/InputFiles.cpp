@@ -70,7 +70,7 @@ uint32_t ObjFile::getRelocatedAddress(uint32_t Index) const {
 
 uint32_t ObjFile::relocateFunctionIndex(uint32_t Original) const {
   DEBUG(dbgs() << "relocateFunctionIndex: " << Original);
-  const Symbol* Sym = getFunctionSymbol(Original);
+  const Symbol *Sym = getFunctionSymbol(Original);
   uint32_t Index;
   if (Sym)
     Index = Sym->getOutputIndex();
@@ -130,9 +130,9 @@ void ObjFile::parse() {
 }
 
 // Return the InputSegment in which a given symbol is defined.
-InputSegment* ObjFile::getSegment(const WasmSymbol &WasmSym) {
+InputSegment *ObjFile::getSegment(const WasmSymbol &WasmSym) {
   uint32_t Address = WasmObj->getWasmSymbolValue(WasmSym);
-  for (InputSegment* Segment : Segments) {
+  for (InputSegment *Segment : Segments) {
     if (Address >= Segment->startVA() && Address < Segment->endVA()) {
       DEBUG(dbgs() << "Found symbol in segment: " << WasmSym.Name << " -> "
                    << Segment->getName() << "\n");
@@ -164,7 +164,7 @@ void ObjFile::initializeSymbols() {
   for (const WasmSegment &Seg : WasmObj->dataSegments())
     Segments.emplace_back(make<InputSegment>(&Seg, this));
 
-  Symbol* S;
+  Symbol *S;
   for (const SymbolRef &Sym : WasmObj->symbols()) {
     const WasmSymbol &WasmSym = WasmObj->getWasmSymbol(Sym.getRawDataRefImpl());
     switch (WasmSym.Type) {
@@ -185,10 +185,12 @@ void ObjFile::initializeSymbols() {
 
     Symbols.push_back(S);
     if (WasmSym.isFunction()) {
-      DEBUG(dbgs() << "Function: " << WasmSym.ElementIndex << " -> " << toString(*S) << "\n");
+      DEBUG(dbgs() << "Function: " << WasmSym.ElementIndex << " -> "
+                   << toString(*S) << "\n");
       FunctionSymbols[WasmSym.ElementIndex] = S;
     } else {
-      DEBUG(dbgs() << "Global: " << WasmSym.ElementIndex << " -> " << toString(*S) << "\n");
+      DEBUG(dbgs() << "Global: " << WasmSym.ElementIndex << " -> "
+                   << toString(*S) << "\n");
       GlobalSymbols[WasmSym.ElementIndex] = S;
     }
   }
@@ -202,8 +204,8 @@ Symbol *ObjFile::createUndefined(const WasmSymbol &Sym) {
 }
 
 Symbol *ObjFile::createDefined(const WasmSymbol &Sym,
-                                  const InputSegment *Segment) {
-  Symbol* S;
+                               const InputSegment *Segment) {
+  Symbol *S;
   if (Sym.isLocal()) {
     S = make<Symbol>(Sym.Name, true);
     Symbol::Kind Kind;

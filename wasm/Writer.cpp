@@ -431,7 +431,7 @@ void Writer::createLinkingSection() {
   if (Segments.size() && Config->Relocatable) {
     SubSection SubSection(WASM_SEGMENT_INFO);
     writeUleb128(SubSection.getStream(), Segments.size(), "num data segments");
-    for (const OutputSegment *S: Segments) {
+    for (const OutputSegment *S : Segments) {
       writeStr(SubSection.getStream(), S->Name, "segment name");
       writeUleb128(SubSection.getStream(), S->Alignment, "alignment");
       writeUleb128(SubSection.getStream(), 0, "flags");
@@ -501,7 +501,8 @@ void Writer::layoutMemory() {
   for (OutputSegment *Seg : Segments) {
     MemoryPtr = alignTo(MemoryPtr, Seg->Alignment);
     Seg->StartVA = MemoryPtr;
-    debugPrint("mem: %-10s offset=%-8d size=%-4d align=%d\n", Seg->Name.str().c_str(), MemoryPtr, Seg->Size, Seg->Alignment);
+    debugPrint("mem: %-10s offset=%-8d size=%-4d align=%d\n",
+               Seg->Name.str().c_str(), MemoryPtr, Seg->Size, Seg->Alignment);
     MemoryPtr += Seg->Size;
   }
 
@@ -657,7 +658,8 @@ void Writer::assignSymbolIndexes() {
       if (Sym->getFile() && isa<ObjFile>(Sym->getFile())) {
         auto *Obj = cast<ObjFile>(Sym->getFile());
         if (Sym->isFunction())
-          Sym->setOutputIndex(Obj->FunctionIndexOffset + Sym->getFunctionIndex());
+          Sym->setOutputIndex(Obj->FunctionIndexOffset +
+                              Sym->getFunctionIndex());
         else
           Sym->setOutputIndex(Obj->GlobalIndexOffset + Sym->getGlobalIndex());
       }
@@ -685,7 +687,7 @@ void Writer::createOutputSegments() {
   for (ObjFile *File : Symtab->ObjectFiles) {
     for (InputSegment *Segment : File->Segments) {
       StringRef Name = getOutputDataSegmentName(Segment->getName());
-      OutputSegment*& S = SegmentMap[Name];
+      OutputSegment *&S = SegmentMap[Name];
       if (S == nullptr) {
         DEBUG(dbgs() << "new segment: " << Name << "\n");
         S = make<OutputSegment>(Name);
@@ -693,7 +695,7 @@ void Writer::createOutputSegments() {
       }
       S->addInputSegment(Segment);
       DEBUG(dbgs() << "added data: " << Name << ": " << S->Size << "\n");
-      for (const WasmRelocation& R : File->DataSection->Relocations) {
+      for (const WasmRelocation &R : File->DataSection->Relocations) {
         if (R.Offset >= Segment->getInputSectionOffset() &&
             R.Offset < Segment->getInputSectionOffset() + Segment->getSize()) {
           Segment->Relocations.push_back(R);

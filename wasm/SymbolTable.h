@@ -48,7 +48,8 @@ public:
 
   Symbol *find(StringRef Name);
 
-  Symbol *addDefined(InputFile *F, const WasmSymbol *Sym, const InputSegment *Segment = nullptr);
+  Symbol *addDefined(InputFile *F, const WasmSymbol *Sym,
+                     const InputSegment *Segment = nullptr);
   Symbol *addUndefined(InputFile *F, const WasmSymbol *Sym);
   Symbol *addUndefinedFunction(StringRef Name);
   Symbol *addDefinedGlobal(StringRef Name);
