@@ -211,7 +211,8 @@ void OutputSection::writeHeaderTo(uint8_t *Buf) {
     // If name is too long, write offset into the string table as a name.
     sprintf(Hdr->Name, "/%d", StringTableOff);
   } else {
-    assert(!Config->Debug || Name.size() <= COFF::NameSize);
+    assert(!Config->Debug || Name.size() <= COFF::NameSize ||
+           (Hdr->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) == 0);
     strncpy(Hdr->Name, Name.data(),
             std::min(Name.size(), (size_t)COFF::NameSize));
   }
@@ -541,6 +542,13 @@ void Writer::createSymbolAndStringTable() {
     StringRef Name = Sec->getName();
     if (Name.size() <= COFF::NameSize)
       continue;
+    // If a section isn't discardable (i.e. will be mapped at runtime),
+    // prefer a truncated section name over a long section name in
+    // the string table that is unavailable at runtime. This is different from
+    // what link.exe does, but finding ".eh_fram" instead of "/4" is useful
+    // to libunwind.
+    if ((Sec->getPermissions() & IMAGE_SCN_MEM_DISCARDABLE) == 0)
+      continue;
     Sec->setStringTableOff(addEntryToStringTable(Name));
   }
 
@@ -564,8 +572,7 @@ void Writer::createSymbolAndStringTable() {
     PointerToSymbolTable = FileOff;
     FileOff += OutputSymtab.size() * sizeof(coff_symbol16);
   }
-  if (!Strtab.empty())
-    FileOff += Strtab.size() + 4;
+  FileOff += Strtab.size() + 4;
   FileSize = alignTo(FileOff, SectorSize);
 }
 
@@ -788,11 +795,9 @@ void Writer::createSEHTable(OutputSection *RData) {
     if (!File->SEHCompat)
       return;
     for (Symbol *B : File->SEHandlers) {
-      // Make sure the handler is still live. Assume all handlers are regular
-      // symbols.
-      auto *D = dyn_cast<DefinedRegular>(B);
-      if (D && D->getChunk()->isLive())
-        Handlers.insert(D);
+      // Make sure the handler is still live.
+      if (B->isLive())
+        Handlers.insert(cast<Defined>(B));
     }
   }
 
