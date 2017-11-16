@@ -5,7 +5,7 @@ Note: The WebAssembly port is still a work in progress and is be lacking
 certain features.
 
 The WebAssembly version of lld takes WebAssembly binaries as inputs and produces
-a WebAssembly binary as its output.  For the most part this port tried to mimik
+a WebAssembly binary as its output.  For the most part this port tried to mimic
 the behaviour of traditional ELF linkers and specifically the ELF lld port.
 Where possible that command line flags and the semantics should be the same.
 
@@ -30,7 +30,7 @@ There are several key features that are not yet implement in the WebAssembly
 ports:
 
 - COMDAT support.  This means that support for C++ is still very limited.
-- Function stripping.  Essentially there is no GC of sections so functions and
-  data from a given object will linked be in as a unit.
+- Function stripping.  Currently there is no support for `--gc-sections` so
+  functions and data from a given object will linked as a unit.
 - Section start/end symbols.  The synthetic symbols that mark the start and
   of data regions are not yet created in the output file.

@@ -58,8 +58,6 @@ private:
   std::vector<InputFile *> Files;
 };
 
-LinkerDriver *Driver;
-
 } // anonymous namespace
 
 std::vector<SpecificAllocBase *> lld::wasm::SpecificAllocBase::Instances;
@@ -76,10 +74,9 @@ bool lld::wasm::link(ArrayRef<const char *> Args, bool CanExitEarly,
       "-error-limit=0 to see all errors)";
 
   Config = make<Configuration>();
-  Driver = make<LinkerDriver>();
   Symtab = make<SymbolTable>();
 
-  Driver->link(Args);
+  LinkerDriver().link(Args);
 
   // Exit immediately if we don't need to return to the caller.
   // This saves time because the overhead of calling destructors
