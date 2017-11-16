@@ -102,7 +102,7 @@ Symbol *SymbolTable::addDefinedGlobal(StringRef Name) {
   std::tie(S, WasInserted) = insert(Name);
   if (WasInserted)
     S->update(Symbol::DefinedGlobalKind);
-  else if (!S->isFunction())
+  else if (!S->isGlobal())
     error("symbol type mismatch: " + Name);
   return S;
 }
