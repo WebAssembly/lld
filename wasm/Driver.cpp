@@ -348,6 +348,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   if (!Config->Entry.empty()) {
     Symbol *Sym = Symtab->find(Config->Entry);
+    if (!Sym)
+      fatal("entry point not found: " + Config->Entry);
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
   }
