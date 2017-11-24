@@ -267,7 +267,8 @@ void Writer::createExportSection() {
   // Memory is and main function are exported for executables.
   bool ExportMemory = !Config->Relocatable && !Config->ImportMemory;
   bool ExportMain = !Config->Relocatable;
-  bool ExportOther = true; // Config->Relocatable;
+  bool ExportOther = true; // ??? TODO Config->Relocatable;
+  bool ExportHidden = Config->Relocatable;
 
   uint32_t NumExports = 0;
 
@@ -281,7 +282,7 @@ void Writer::createExportSection() {
     for (ObjFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
         if (!Sym->isFunction() || Sym->isLocal() || Sym->isUndefined() ||
-            Sym->WrittenToSymtab)
+            (Sym->isHidden() && !ExportHidden) || Sym->WrittenToSymtab)
           continue;
         Sym->WrittenToSymtab = true;
         ++NumExports;
@@ -324,8 +325,8 @@ void Writer::createExportSection() {
   if (ExportOther) {
     for (ObjFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
-        if (!Sym->isFunction() || Sym->isLocal() | Sym->isUndefined() ||
-            !Sym->WrittenToSymtab)
+        if (!Sym->isFunction() || Sym->isLocal() || Sym->isUndefined() ||
+            (Sym->isHidden() && !ExportHidden) || !Sym->WrittenToSymtab)
           continue;
         Sym->WrittenToSymtab = false;
         log("Export: " + Sym->getName());
@@ -339,9 +340,6 @@ void Writer::createExportSection() {
         writeExport(OS, Export);
       }
     }
-
-    // TODO(sbc): Export local symbols too, Even though they are not part
-    // of the symbol table?
   }
 }
 
@@ -416,7 +414,7 @@ void Writer::createRelocSections() {
   }
 }
 
-// Create the custome "linking" section containing linker metadata.
+// Create the custom "linking" section containing linker metadata.
 // This is only created when relocatable output is requested.
 void Writer::createLinkingSection() {
   SyntheticSection *Section =
@@ -487,7 +485,7 @@ void Writer::writeSections() {
 }
 
 // Fix the memory layout of the output binary.  This assigns memory offsets
-// to each of the intput data sections as well as the explicit stack region.
+// to each of the input data sections as well as the explicit stack region.
 void Writer::layoutMemory() {
   uint32_t MemoryPtr = 0;
   if (!Config->Relocatable) {

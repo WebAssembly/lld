@@ -128,14 +128,14 @@ Symbol *SymbolTable::addDefined(InputFile *F, const WasmSymbol *Sym,
     S->update(Kind, F, Sym, Segment);
   } else if (Sym->isWeak()) {
     // the new symbol is weak we can ignore it
-    DEBUG(dbgs() << "existing symbol takes precensence\n");
+    DEBUG(dbgs() << "existing symbol takes precedence\n");
   } else if (S->isWeak()) {
     // the new symbol is not weak and the existing symbol is, so we replace
     // it
     DEBUG(dbgs() << "replacing existing weak symbol\n");
     S->update(Kind, F, Sym, Segment);
   } else {
-    // niether symbol is week. They conflict.
+    // neither symbol is week. They conflict.
     reportDuplicate(S, F);
   }
   return S;
