@@ -305,22 +305,6 @@ void Writer::createExportSection() {
     writeExport(OS, MemoryExport);
   }
 
-  if (ExportMain) {
-    Symbol *Sym = Symtab->find(Config->Entry);
-    if (Sym->isDefined()) {
-      if (!Sym->isFunction())
-        fatal("entry point is not a function: " + Sym->getName());
-
-      if (!ExportOther) {
-        WasmExport MainExport;
-        MainExport.Name = Config->Entry;
-        MainExport.Kind = WASM_EXTERNAL_FUNCTION;
-        MainExport.Index = Sym->getOutputIndex();
-        writeExport(OS, MainExport);
-      }
-    }
-  }
-
   if (ExportOther) {
     for (ObjFile *File : Symtab->ObjectFiles) {
       for (Symbol *Sym : File->getSymbols()) {
@@ -345,7 +329,22 @@ void Writer::createExportSection() {
   }
 }
 
-void Writer::createStartSection() {}
+void Writer::createStartSection() {
+  if (Config->Entry.empty())
+    return;
+
+  const Symbol *Sym = Symtab->find(Config->Entry);
+  if (!Sym)
+    fatal("entry point not found: " + Config->Entry);
+  if (!Sym->isFunction())
+    fatal("entry point is not a function: " + Sym->getName());
+
+  SyntheticSection *Section = createSyntheticSection(WASM_SEC_START);
+  raw_ostream &OS = Section->getStream();
+
+  log("Start: " + Sym->getName());
+  writeUleb128(OS, Sym->getOutputIndex(), "start index");
+}
 
 void Writer::createElemSection() {
   if (!NumElements)

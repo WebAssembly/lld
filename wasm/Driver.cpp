@@ -292,10 +292,11 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   Config->AllowUndefined = Args.hasArg(OPT_allow_undefined);
   Config->EmitRelocs = Args.hasArg(OPT_emit_relocs);
-  Config->Entry = Args.getLastArgValue(OPT_entry);
+  Config->Relocatable = Args.hasArg(OPT_relocatable);
+  Config->Entry = Args.getLastArgValue(OPT_entry,
+                                       Config->Relocatable ? "" : "_start");
   Config->ImportMemory = Args.hasArg(OPT_import_memory);
   Config->OutputFile = Args.getLastArgValue(OPT_o);
-  Config->Relocatable = Args.hasArg(OPT_relocatable);
   Config->SearchPaths = getArgs(Args, OPT_L);
   Config->StripAll = Args.hasArg(OPT_strip_all);
   Config->StripDebug = Args.hasArg(OPT_strip_debug);
@@ -323,9 +324,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
     error("entry point specified for relocatable output file");
 
   if (!Config->Relocatable) {
-    if (Config->Entry.empty())
-      Config->Entry = "_start";
-    addSyntheticUndefinedFunction(Config->Entry);
+    if (!Config->Entry.empty())
+      addSyntheticUndefinedFunction(Config->Entry);
 
     addSyntheticGlobal("__stack_pointer", 0);
   }
@@ -348,6 +348,8 @@ void LinkerDriver::link(ArrayRef<const char *> ArgsArr) {
 
   if (!Config->Entry.empty()) {
     Symbol *Sym = Symtab->find(Config->Entry);
+    if (!Sym)
+      fatal("entry point not found: " + Config->Entry);
     if (!Sym->isFunction())
       fatal("entry point is not a function: " + Sym->getName());
   }
