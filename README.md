@@ -1,3 +1,10 @@
+** THIS REPOSITORY IS NOT ACTIVE **
+===================================
+
+This repository was created in order to work and a WebAssembly port of lld.
+The port is now part of upstream lld.  In order to get the latest version
+or make contrubutions please use the upstream version:
+https://lld.llvm.org/getting_started.html
 
 LLVM Linker (lld)
 ==============================
